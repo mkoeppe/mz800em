@@ -70,6 +70,7 @@ int bs_inhibit=0;
 int mz800mode=0;
 int mzbpl=40;
 int directvideo=1;
+int ignoreplane=0;
 int DMD=0;
 int WF, RF;
 int SCROLL[8], OLDSCROLL[8];
@@ -338,6 +339,11 @@ int main(argc,argv)
 
   if(argc>=2 && strcmp(argv[1],"-l")==0) { /* "funny lpt loopback" */ 
     funny_lpt_loopback = 1;
+    argv+=1, argc-=1;
+  }
+
+  if(argc>=2 && strcmp(argv[1],"-p")==0) { /* "ignore planes" */ 
+    ignoreplane = 1; /* FIXME: Should be useless, but is needed for one game */ 
     argv+=1, argc-=1;
   }
 
@@ -1477,13 +1483,13 @@ void graphics_write(int addr, int value)
   int x, y;
   unsigned char *pptr, *buffer;
   if (directvideo) {
-    if (WF & 16) /* plane B */
+    if (WF & 16 && !ignoreplane) /* plane B */
       pptr = vbuffer + 0x10000 + (addr - 0x8000) * 8;
     else /* plane A */
       pptr = vptr + (addr - 0x8000) * 8;
   }
   else {
-    if (WF & 16) /* plane B */
+    if (WF & 16 && !ignoreplane) /* plane B */
       pptr = vbuffer + 0x10000 + (addr - 0x8000) * 8;
     else { /* plane A */
       pptr = buffer = vbuffer + (addr - 0x8000) * 8;
@@ -1519,7 +1525,7 @@ void graphics_write(int addr, int value)
       if (value & 1) *pptr = (WF & 15) /* | 0x10 */;
     break;
   }
-  if (!directvideo && !(WF & 16)) {
+  if (!directvideo && !(WF & 16 && !ignoreplane)) {
     vga_drawscansegment(buffer, x, y, 8);
   }
 }
@@ -1533,7 +1539,7 @@ int graphics_read(int addr)
     pptr = vptr + (addr - 0x8000) * 8;
   }
   else {
-    if (RF & 16) /* plane B */
+    if (RF & 16 && !ignoreplane) /* plane B */
       pptr = vbuffer + 0x10000 + (addr - 0x8000) * 8;
     else /* plane A */
       pptr = vbuffer + (addr - 0x8000) * 8;
