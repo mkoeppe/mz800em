@@ -113,6 +113,11 @@ int scrn_freq=2;
 unsigned char keyports[10]={0,0,0,0,0, 0,0,0,0,0};
 #if defined(USE_RAWKEY)
 int scancode[128];
+#else
+unsigned char key_state[128];
+int codering[CODERINGSIZE];
+int front = 0, end = 0;
+void key_handler(int scancode, int press);
 #endif
 
 unsigned char vidmem_old[4096];
@@ -389,6 +394,8 @@ int main(argc,argv)
   for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
 #else
   keyboard_init();
+  keyboard_seteventhandler(key_handler);
+  keyboard_translatekeys(DONT_CATCH_CTRLC);
 #endif
 
   if(argc>=2 && strcmp(argv[1],"-c")==0) { /* "copy rom to ram" */ 
@@ -403,8 +410,6 @@ int main(argc,argv)
     RealTimer = 1;
     argv++, argc--;
   }
-
-  /* XXX insert any snap loader here */
 
   sa.sa_handler=dontpanic;
   sa.sa_mask=0;
@@ -1135,8 +1140,17 @@ void toggle_blackwhite()
 
 #if defined(USE_RAWKEY)
 #else
-# define is_key_pressed keyboard_keypressed
+# define is_key_pressed(k) key_state[k]
 # define scan_keyboard keyboard_update
+
+void key_handler(int scancode, int press)
+{
+  if ((end+1) % CODERINGSIZE != front) {
+    codering[end] = press ? scancode : (scancode|0x80);
+    end = (end+1) % CODERINGSIZE;
+  }
+  key_state[scancode&127] = press;
+}
 #endif
 
 update_kybd()
@@ -1178,7 +1192,7 @@ update_kybd()
   if(is_key_pressed(SCANCODE_APOSTROPHE))	keyports[0]|=0x02;	/* colon */
   if(is_key_pressed(SCANCODE_SEMICOLON))	keyports[0]|=0x04;
   if(is_key_pressed(SCANCODE_TAB))		keyports[0]|=0x10;
-  if(is_key_pressed(SCANCODE_LESS))	keyports[0]|=0x20;*/	/*arrow/pound*/
+  if(is_key_pressed(SCANCODE_LESS))	keyports[0]|=0x20;	/*arrow/pound*/
   if(is_key_pressed(SCANCODE_PAGEUP))		keyports[0]|=0x40;	/* graph */
   if(is_key_pressed(SCANCODE_GRAVE))	keyports[0]|=0x40; /* (alternative) */
   if(is_key_pressed(SCANCODE_PAGEDOWN))	keyports[0]|=0x80; /*blank key nr CR */

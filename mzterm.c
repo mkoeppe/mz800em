@@ -18,39 +18,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <stdio.h>
 #include <vgakeyboard.h>
+#include "mz700em.h"
 
 /* You need a special patched version of the DBASIC interpreter to use 
    the services provided in this file. */
 
-/* FIXME: In main.c, access our `states' array instead of calling is_key_pressed(). 
-   (The latter is meaningless as soon as we have installed our handler...) */
-
 static int ok = 0;
-
-#define CODERINGSIZE 16
-
-static int codering[CODERINGSIZE];
-static int front = 0, end = 0;
 
 static int capslock = 0, numlock = 0, scrolllock = 0;
 static int shift = 0, ctrl = 0, alt = 0, rightshift = 0;
-static unsigned char state[128];
-
-void handler(int scancode, int press)
-{
-  if ((end+1) % CODERINGSIZE != front) {
-    codering[end] = press ? scancode : (scancode|0x80);
-    end = (end+1) % CODERINGSIZE;
-  }
-  state[scancode&127] = press;
-}
 
 static void needconsole()
 {
   if (ok) return;
-  keyboard_seteventhandler(handler);
   ok = 1;
 }
 
