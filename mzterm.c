@@ -59,6 +59,22 @@ int getmzkey()
   
   needconsole();
 
+  if (key_state[SCANCODE_RIGHTSHIFT] && key_state[SCANCODE_RIGHTCONTROL] /* mzterm-ish */
+      || ((key_state[SCANCODE_LEFTSHIFT] || key_state[SCANCODE_RIGHTSHIFT])
+	  && key_state[SCANCODE_BACKSPACE] /* mz800em-ish break */ )) {
+    static long last_async_break = 0;
+    long ticks;
+    struct timeval tv;
+    struct timezone tz;
+    gettimeofday(&tv, &tz);
+    ticks = 2 * tv.tv_sec + tv.tv_usec / 500000;
+    if (ticks > last_async_break) {
+      last_async_break = ticks;
+      return 0x1B;
+    }
+    return 0;
+  }
+
   if (front == end) return 0;
   
   c = codering[front];
