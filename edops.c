@@ -1,6 +1,6 @@
 /* Emulations of the ED operations of the Z80 instruction set.
  * Copyright (C) 1994 Ian Collier.
- * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
+ * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@mail.math.uni-magdeburg.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

@@ -1,6 +1,6 @@
 /* Emulation of the Z80 CPU with hooks into the other parts of mz700em.
  * Copyright (C) 1994 Ian Collier. mz700em changes (C) 1996 Russell Marks.
- * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
+ * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@mail.math.uni-magdeburg.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

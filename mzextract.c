@@ -1,6 +1,6 @@
 /* mzextract -- Extract the contents of a SHARP MZ800 320KB disk image 
  * as single MZF/BTX files, or view the directory.
- * Copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
+ * Copr. 1998 Matthias Koeppe <mkoeppe@mail.math.uni-magdeburg.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

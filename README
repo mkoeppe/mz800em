@@ -4,7 +4,7 @@ system, also available for Windows-32 systems.
 Z80 emulation from `xz80', copyright (C) 1994 Ian Collier.
 MZ700 support and VGA front-end (C) 1996 Russell Marks.
 MZ800 support and Windows-32 port are copr. 1998,1999 Matthias Koeppe 
-<mkoeppe@cs.uni-magdeburg.de>.
+<mkoeppe@mail.math.uni-magdeburg.de>.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -49,10 +49,14 @@ Getting mz800em
 
 Visit the mz800em pages at
 
-	http://www.cs.uni-magdeburg.de/~mkoeppe/mz800/mz800.html
+	http://www.math.uni-magdeburg.de/~mkoeppe/mz800/mz800.html
 
 You will find the most current version of `mz800em' there, but also
 some interesting MZ-related links.
+
+Mz800em is also a SourceForge project. Visit 
+
+	http://sourceforge.net/projects/mz800em/
 
 
 Installation
@@ -400,8 +404,8 @@ Write a man page.
 Contacting me
 -------------
 
-Email address: mkoeppe@cs.uni-magdeburg.de
-Web pages:     http://www.cs.uni-magdeburg.de/~mkoeppe
+Email address: mkoeppe@mail.math.uni-magdeburg.de
+Web pages:     http://www.math.uni-magdeburg.de/~mkoeppe
 
 No postal address for you at the moment I'm afraid. :-)
 

@@ -3,7 +3,7 @@
  * usage: unpix <font.txt >mz700fon.dat
  */
 
-/* bit order changed by <mkoeppe@csmd.cs.uni-magdeburg.de> to make the
+/* bit order changed by <mkoeppe@mail.math.uni-magdeburg.de> to make the
    font data compatible with the MZ800 PCG ROM format. The same change
    was applied to main.c */
 
