@@ -166,8 +166,9 @@ int pending_timer_interrupts;
 int pending_vbln_interrupts;
 
 #if defined(USE_MZ80) && defined(TWO_Z80_COPIES)
-   extern UINT32 mz80cyclesRemaining, mz80fcyclesRemaining;
-#  define SET_INTERRUPTED(a) mz80cyclesRemaining = mz80fcyclesRemaining = 0, interrupted = a
+extern void mz80ReleaseTimeslice();
+extern void mz80fReleaseTimeslice();
+#  define SET_INTERRUPTED(a) mz80ReleaseTimeslice(), mz80fReleaseTimeslice(), interrupted = a
 #else
 #  define SET_INTERRUPTED(a) interrupted = a
 #endif
@@ -271,7 +272,7 @@ void dontpanic(a)
      int a;
 {
   if(audio_fd!=-1) close(audio_fd);
-#if defined(linux)
+#if defined(PRINT_INVOKES_ENSCRIPT)
   if (printerfile) {
     if (!batch) pclose(printerfile), printerfile = 0;
   }
@@ -1276,8 +1277,11 @@ update_kybd()
   for(y=0;y<10;y++) keyports[y]=0;
 
 #if defined(__CYGWIN__)
-  /* FIXME */
-  /*   if (GetActiveWindow() != window_handle) return; */
+  if (GetFocus() != window_handle) {
+    /* no key press if not active */
+    for(y=0;y<10;y++) keyports[y]=255;
+    return;
+  }
 #endif
 
 #if defined(USE_RAWKEY)
@@ -1426,8 +1430,7 @@ fix_tstates()
 
 do_interrupt()
 {
-#if defined(__CYGWIN__)
-  /* not in linux */
+#if !defined(PRINT_INVOKES_ENSCRIPT)
   if (printerfile) fclose(printerfile), printerfile = 0;
 #endif  
   if (!batch) {

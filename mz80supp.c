@@ -30,7 +30,7 @@ extern void mz80fGetContext(void *);
 extern void mz80fSetContext(void *);
 extern void mz80freset(void);
 extern UINT32 mz80fint(UINT32);
-extern UINT32 mz80cyclesRemaining, mz80fcyclesRemaining;
+extern void mz80fReleaseTimeslice();
 #endif
 
 CONTEXTMZ80 context;
@@ -124,7 +124,8 @@ void bankswitchmode(int mode)
   memcpy(mz800emMemoryWrite, &mz800emMemoryWriteModes[mode],
 	 sizeof(struct MemoryWriteByte));
 #if defined(TWO_Z80_COPIES)
-  mz80cyclesRemaining = mz80fcyclesRemaining = 0;
+  mz80ReleaseTimeslice();
+  mz80fReleaseTimeslice();
 #endif
 }
 
