@@ -19,7 +19,7 @@
 
 #define input(var) {  unsigned short u;\
                       var=u=in(b,c);\
-                      tstates+=u>>8;\
+                      INC_TSTATES(u>>8);\
                       f=(f&1)|(var&0xa8)|((!var)<<6)|parity(var);\
                    }
 #define sbchl(x) {    unsigned short z=(x);\
@@ -48,14 +48,16 @@
 {
    unsigned char op=fetch(pc);
    pc++;
+#ifndef NO_COUNT_TSTATES
    radjust++;
+#endif
    switch(op){
 instr(0x40,8);
    input(b);
 endinstr;
 
 instr(0x41,8);
-   tstates+=out(b,c,b);
+   INC_TSTATES(out(b,c,b));
 endinstr;
 
 instr(0x42,11);
@@ -91,7 +93,7 @@ instr(0x48,8);
 endinstr;
 
 instr(0x49,8);
-   tstates+=out(b,c,c);
+   INC_TSTATES(out(b,c,c));
 endinstr;
 
 instr(0x4a,11);
@@ -101,8 +103,8 @@ endinstr;
 instr(0x4b,16);
    {unsigned short addr=fetch2(pc);
     pc+=2;
-    c=fetch(addr);
-    b=fetch(addr+1);
+    c=load(addr);
+    b=load(addr+1);
    }
 endinstr;
 
@@ -129,7 +131,7 @@ instr(0x50,8);
 endinstr;
 
 instr(0x51,8);
-   tstates+=out(b,c,d);
+   INC_TSTATES(out(b,c,d));
 endinstr;
 
 instr(0x52,11);
@@ -165,7 +167,7 @@ instr(0x58,8);
 endinstr;
 
 instr(0x59,8);
-   tstates+=out(b,c,e);
+   INC_TSTATES(out(b,c,e));
 endinstr;
 
 instr(0x5a,11);
@@ -175,8 +177,8 @@ endinstr;
 instr(0x5b,16);
    {unsigned short addr=fetch2(pc);
     pc+=2;
-    e=fetch(addr);
-    d=fetch(addr+1);
+    e=load(addr);
+    d=load(addr+1);
    }
 endinstr;
 
@@ -203,7 +205,7 @@ instr(0x60,8);
 endinstr;
 
 instr(0x61,8);
-   tstates+=out(b,c,h);
+   INC_TSTATES(out(b,c,h));
 endinstr;
 
 instr(0x62,11);
@@ -230,7 +232,7 @@ instr(0x66,4);
 endinstr;
 
 instr(0x67,14);
-   {unsigned char t=fetch(hl);
+   {unsigned char t=load(hl);
     unsigned char u=(a<<4)|(t>>4);
     a=(a&0xf0)|(t&0x0f);
     store(hl,u);
@@ -243,7 +245,7 @@ instr(0x68,8);
 endinstr;
 
 instr(0x69,8);
-   tstates+=out(b,c,l);
+   INC_TSTATES(out(b,c,l));
 endinstr;
 
 instr(0x6a,11);
@@ -253,8 +255,8 @@ endinstr;
 instr(0x6b,16);
    {unsigned short addr=fetch2(pc);
     pc+=2;
-    l=fetch(addr);
-    h=fetch(addr+1);
+    l=load(addr);
+    h=load(addr+1);
    }
 endinstr;
 
@@ -271,7 +273,7 @@ instr(0x6e,4);
 endinstr;
 
 instr(0x6f,5);
-   {unsigned char t=fetch(hl);
+   {unsigned char t=load(hl);
     unsigned char u=(a&0x0f)|(t<<4);
     a=(a&0xf0)|(t>>4);
     store(hl,u);
@@ -284,7 +286,7 @@ instr(0x70,8);
 endinstr;
 
 instr(0x71,8);
-   tstates+=out(b,c,0);
+   INC_TSTATES(out(b,c,0));
 endinstr;
 
 instr(0x72,11);
@@ -315,7 +317,7 @@ instr(0x78,8);
 endinstr;
 
 instr(0x79,8);
-   tstates+=out(b,c,a);
+   INC_TSTATES(out(b,c,a));
 endinstr;
 
 instr(0x7a,11);
@@ -325,7 +327,7 @@ endinstr;
 instr(0x7b,16);
    {unsigned short addr=fetch2(pc);
     pc+=2;
-    sp=fetch2(addr);
+    sp=load2(addr);
    }
 endinstr;
 
@@ -342,7 +344,7 @@ instr(0x7e,4);
 endinstr;
 
 instr(0xa0,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     store(de,x);
     if(!++l)h++;
     if(!++e)d++;
@@ -353,7 +355,7 @@ endinstr;
 
 instr(0xa1,12);
    {unsigned char carry=cy;
-    cpa(fetch(hl));
+    cpa(load(hl));
     if(!++l)h++;
     if(!c--)b--;
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
@@ -366,7 +368,7 @@ instr(0xa2,12);
      b--; /* MK: the already decremented b is taken as high port address */ 
     t=in(b,c);
     store(hl,t);
-    tstates+=t>>8;
+    INC_TSTATES(t>>8);
     if(!++l)h++;
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c)&4);
    }
@@ -376,16 +378,16 @@ instr(0xa3,12); /* I can't determine the correct flags outcome for the
                    block OUT instructions.  Spec says that the carry
                    flag is left unchanged and N is set to 1, but that
                    doesn't seem to be the case... */
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
-    tstates+=out(b,c,x);
+    INC_TSTATES(out(b,c,x));
     if(!++l)h++;
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
    }
 endinstr;
 
 instr(0xa8,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     store(de,x);
     if(!l--)h--;
     if(!e--)d--;
@@ -396,7 +398,7 @@ endinstr;
 
 instr(0xa9,12);
    {unsigned char carry=cy;
-    cpa(fetch(hl));
+    cpa(load(hl));
     if(!l--)h--;
     if(!c--)b--;
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
@@ -409,16 +411,16 @@ instr(0xaa,12);
     b--; /* MK: the already decremented b is taken as high port address */ 
     t=in(b,c);
     store(hl,t);
-    tstates+=t>>8;
+    INC_TSTATES(t>>8);
     if(!l--)h--;
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c^4)&4);
    }
 endinstr;
 
 instr(0xab,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
-    tstates+=out(b,c,x);
+    INC_TSTATES(out(b,c,x));
     if(!l--)h--;
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
    }
@@ -428,23 +430,23 @@ endinstr;
    to change this... */
 
 instr(0xb0,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     store(de,x);
     if(!++l)h++;
     if(!++e)d++;
     if(!c--)b--;
     f=(f&0xc1)|(x&0x28)|(((b|c)>0)<<2);
-    if(b|c)pc-=2,tstates+=5;
+    if(b|c)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
 instr(0xb1,12);
    {unsigned char carry=cy;
-    cpa(fetch(hl));
+    cpa(load(hl));
     if(!++l)h++;
     if(!c--)b--;
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
-    if((f&0x44)==4)pc-=2,tstates+=5;
+    if((f&0x44)==4)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
@@ -454,41 +456,41 @@ instr(0xb2,12);
      b--; /* MK: the already decremented b is taken as high port address */ 
      t=in(b,c);
     store(hl,t);
-    tstates+=t>>8;
+    INC_TSTATES(t>>8);
     if(!++l)h++;
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c)&4);
-    if(b)pc-=2,tstates+=5;
+    if(b)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
 instr(0xb3,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
-    tstates+=out(b,c,x);
+    INC_TSTATES(out(b,c,x));
     if(!++l)h++;
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
-    if(b)pc-=2,tstates+=5;
+    if(b)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
 instr(0xb8,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     store(de,x);
     if(!l--)h--;
     if(!e--)d--;
     if(!c--)b--;
     f=(f&0xc1)|(x&0x28)|(((b|c)>0)<<2);
-    if(b|c)pc-=2,tstates+=5;
+    if(b|c)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
 instr(0xb9,12);
    {unsigned char carry=cy;
-    cpa(fetch(hl));
+    cpa(load(hl));
     if(!l--)h--;
     if(!c--)b--;
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
-    if((f&0x44)==4)pc-=2,tstates+=5;
+    if((f&0x44)==4)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
@@ -498,20 +500,20 @@ instr(0xba,12);
     b--; /* MK: the already decremented b is taken as high port address */ 
     t=in(b,c);
     store(hl,t);
-    tstates+=t>>8;
+    INC_TSTATES(t>>8);
     if(!l--)h--;
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c^4)&4);
-    if(b)pc-=2,tstates+=5;
+    if(b)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
 instr(0xbb,12);
-   {unsigned char x=fetch(hl);
+   {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
-    tstates+=out(b,c,x);
+    INC_TSTATES(out(b,c,x));
     if(!l--)h--;
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
-    if(b)pc-=2,tstates+=5;
+    if(b)pc-=2,INC_TSTATES(5);
    }
 endinstr;
 
@@ -553,7 +555,7 @@ endinstr;
 instr(0xfd, 4);
 {
   /* IX contains a pointer to the disk control block */
-  diskloader(memptr[ix>>12] + (int)(ix&4095));
+  diskloader(mempointer(ix));
 }
 endinstr;
 
@@ -582,6 +584,6 @@ instr(0xff, 4);
 }
 endinstr;
 
-default: tstates+=4;
+default: INC_TSTATES(4);
 
 }}

@@ -224,7 +224,7 @@ int freadmz(int address, size_t size, size_t nmemb, FILE *f)
 {
   int res;
   if (memattr[address >> 12] == 1) { /* have RAM */
-    res = fread(memptr[address >> 12] + (address&4095), 1, size * nmemb, f);
+    res = fread(mempointer(address), 1, size * nmemb, f);
   }
   else { /* maybe memory-mapped */
     unsigned char *buf = malloc(size * nmemb);
@@ -241,13 +241,13 @@ int fwritemz(int address, size_t size, size_t nmemb, FILE *f)
 {
   int res;
   if (memattr[address >> 12] == 1) { /* have RAM */
-    res = fwrite(memptr[address >> 12] + (address&4095), 1, size * nmemb, f);
+    res = fwrite(mempointer(address), 1, size * nmemb, f);
   }
   else { /* maybe memory-mapped */
     unsigned char *buf = malloc(size * nmemb);
     int i;
     for (i = 0; i<size*nmemb; i++) 
-      buf[i] = fetch(address + i);
+      buf[i] = load(address + i);
     res = fwrite(buf, 1, size * nmemb, f);
     free(buf);
   }

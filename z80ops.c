@@ -16,12 +16,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define instr(opcode,cycles) case opcode: {tstates+=cycles
+#define instr(opcode,cycles) case opcode: {INC_TSTATES(cycles)
 #define HLinstr(opcode,cycles,morecycles) \
                              case opcode: {unsigned short addr; \
-                                tstates+=cycles; \
+                                INC_TSTATES(cycles); \
                                 if(ixoriy==0)addr=hl; \
-                                else tstates+=morecycles, \
+                                else INC_TSTATES(morecycles), \
                                    addr=(ixoriy==1?ix:iy)+ \
                                         (signed char)fetch(pc),\
                                    pc++
@@ -96,21 +96,21 @@
 
 #define jr /* execute relative jump */ do{int j=(signed char)fetch(pc);\
                       pc+=j+1;\
-                      tstates+=5;\
+                      INC_TSTATES(5);\
                    } while(0)
 #define jp /* execute jump */ (pc=fetch2(pc))
 #define call /* execute call */ do{\
-                      tstates+=7;\
+                      INC_TSTATES(7);\
                       push2(pc+2);\
                       jp;\
                    } while(0)
 #define ret /* execute return */ do{\
-                      tstates+=6;\
+                      INC_TSTATES(6);\
                       pop2(pc);\
                    } while(0)
-#define pop2(var) /* pop 16-bit register */ (var=fetch2(sp),sp+=2)
-#define pop1(v1,v2) /* pop register pair */ (v2=fetch(sp),\
-                                             v1=fetch(sp+1),sp+=2)
+#define pop2(var) /* pop 16-bit register */ (var=load2(sp),sp+=2)
+#define pop1(v1,v2) /* pop register pair */ (v2=load(sp),\
+                                             v1=load(sp+1),sp+=2)
 #define push2(val) /* push 16-bit register */ do{sp-=2;store2(sp,(val));}\
                                               while(0)
 #define push1(v1,v2) /* push register pair */ do{sp-=2;\
@@ -161,7 +161,7 @@ instr(9,11);
 endinstr;
 
 instr(10,7);
-   a=fetch(bc);
+   a=load(bc);
 endinstr;
 
 instr(11,6);
@@ -232,7 +232,7 @@ instr(25,11);
 endinstr;
 
 instr(26,7);
-   a=fetch(de);
+   a=load(de);
 endinstr;
 
 instr(27,6);
@@ -344,11 +344,11 @@ instr(42,16);
   {unsigned short addr=fetch2(pc);
    pc+=2;
    if(!ixoriy){
-      l=fetch(addr);
-      h=fetch(addr+1);
+      l=load(addr);
+      h=load(addr+1);
    }
-   else if(ixoriy==1)ix=fetch2(addr);
-   else iy=fetch2(addr);
+   else if(ixoriy==1)ix=load2(addr);
+   else iy=load2(addr);
   }
 endinstr;
 
@@ -410,14 +410,14 @@ instr(51,6);
 endinstr;
 
 HLinstr(52,11,8);
-  {unsigned char t=fetch(addr);
+  {unsigned char t=load(addr);
    inc(t);
    store(addr,t);
   }
 endinstr;
 
 HLinstr(53,11,8);
-  {unsigned char t=fetch(addr);
+  {unsigned char t=load(addr);
    dec(t);
    store(addr,t);
   }
@@ -444,7 +444,7 @@ endinstr;
 instr(58,13);
   {unsigned short addr=fetch2(pc);
    pc+=2;
-   a=fetch(addr);
+   a=load(addr);
   }
 endinstr;
 
@@ -493,7 +493,7 @@ instr(0x45,4);
 endinstr;
 
 HLinstr(0x46,7,8);
-   b=fetch(addr);
+   b=load(addr);
 endinstr;
 
 instr(0x47,4);
@@ -525,7 +525,7 @@ instr(0x4d,4);
 endinstr;
 
 HLinstr(0x4e,7,8);
-   c=fetch(addr);
+   c=load(addr);
 endinstr;
 
 instr(0x4f,4);
@@ -557,7 +557,7 @@ instr(0x55,4);
 endinstr;
 
 HLinstr(0x56,7,8);
-   d=fetch(addr);
+   d=load(addr);
 endinstr;
 
 instr(0x57,4);
@@ -589,7 +589,7 @@ instr(0x5d,4);
 endinstr;
 
 HLinstr(0x5e,7,8);
-   e=fetch(addr);
+   e=load(addr);
 endinstr;
 
 instr(0x5f,4);
@@ -621,7 +621,7 @@ instr(0x65,4);
 endinstr;
 
 HLinstr(0x66,7,8);
-   h=fetch(addr);
+   h=load(addr);
 endinstr;
 
 instr(0x67,4);
@@ -653,7 +653,7 @@ instr(0x6d,4);
 endinstr;
 
 HLinstr(0x6e,7,8);
-   l=fetch(addr);
+   l=load(addr);
 endinstr;
 
 instr(0x6f,4);
@@ -728,7 +728,7 @@ instr(0x7d,4);
 endinstr;
 
 HLinstr(0x7e,7,8);
-   a=fetch(addr);
+   a=load(addr);
 endinstr;
 
 instr(0x7f,4);
@@ -760,7 +760,7 @@ instr(0x85,4);
 endinstr;
 
 HLinstr(0x86,7,8);
-   adda(fetch(addr),0);
+   adda(load(addr),0);
 endinstr;
 
 instr(0x87,4);
@@ -792,7 +792,7 @@ instr(0x8d,4);
 endinstr;
 
 HLinstr(0x8e,7,8);
-   adda(fetch(addr),cy);
+   adda(load(addr),cy);
 endinstr;
 
 instr(0x8f,4);
@@ -824,7 +824,7 @@ instr(0x95,4);
 endinstr;
 
 HLinstr(0x96,7,8);
-   suba(fetch(addr),0);
+   suba(load(addr),0);
 endinstr;
 
 instr(0x97,4);
@@ -856,7 +856,7 @@ instr(0x9d,4);
 endinstr;
 
 HLinstr(0x9e,7,8);
-   suba(fetch(addr),cy);
+   suba(load(addr),cy);
 endinstr;
 
 instr(0x9f,4);
@@ -888,7 +888,7 @@ instr(0xa5,4);
 endinstr;
 
 HLinstr(0xa6,7,8);
-   anda(fetch(addr));
+   anda(load(addr));
 endinstr;
 
 instr(0xa7,4);
@@ -920,7 +920,7 @@ instr(0xad,4);
 endinstr;
 
 HLinstr(0xae,7,8);
-   xora(fetch(addr));
+   xora(load(addr));
 endinstr;
 
 instr(0xaf,4);
@@ -952,7 +952,7 @@ instr(0xb5,4);
 endinstr;
 
 HLinstr(0xb6,7,8);
-   ora(fetch(addr));
+   ora(load(addr));
 endinstr;
 
 instr(0xb7,4);
@@ -984,7 +984,7 @@ instr(0xbd,4);
 endinstr;
 
 HLinstr(0xbe,7,8);
-   cpa(fetch(addr));
+   cpa(load(addr));
 endinstr;
 
 instr(0xbf,4);
@@ -1077,7 +1077,7 @@ instr(0xd2,10);
 endinstr;
 
 instr(0xd3,11);
-   tstates+=out(a,fetch(pc),a);
+   INC_TSTATES(out(a,fetch(pc),a));
    pc++;
 endinstr;
 
@@ -1121,7 +1121,7 @@ endinstr;
 instr(0xdb,11);
    {unsigned short t;
       a=t=in(a,fetch(pc));
-      tstates+=t>>8;
+      INC_TSTATES(t>>8);
       pc++;
    }
 endinstr;
@@ -1163,18 +1163,18 @@ endinstr;
 
 instr(0xe3,19);
    if(!ixoriy){
-      unsigned short t=fetch2(sp);
+      unsigned short t=load2(sp);
       store2b(sp,h,l);
       l=t;
       h=t>>8;
    }
    else if(ixoriy==1){
-      unsigned short t=fetch2(sp);
+      unsigned short t=load2(sp);
       store2(sp,ix);
       ix=t;
    }
    else{
-      unsigned short t=fetch2(sp);
+      unsigned short t=load2(sp);
       store2(sp,iy);
       iy=t;
    }

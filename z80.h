@@ -25,6 +25,9 @@
 #define Z80_save  5
 #define Z80_log   6
 
+#ifdef COPY_BANKSWITCH
+extern unsigned char *visiblemem;
+#endif
 extern unsigned char *memptr[];
 extern int memattr[];
 extern int mmio_in(int addr);
@@ -48,23 +51,55 @@ extern int mainloop(unsigned short initial_pc, unsigned short initial_sp);
 extern int fix_tstates();
 extern void pending_interrupts_hack();
 
-/* bleah :-( */
-#if 1
-#define fetch(x) ((memattr[(unsigned short)(x)>>12]&2)?mmio_in(x):\
-			memptr[(unsigned short)(x)>>12][(x)&4095])
-#else
-/* this is suboptimal but makes compiling realistic on a 16Mb machine
- * with `gcc -O'. (which otherwise thrashes to hell and back)
- */
-static int fetch(int x)
-     /*int x;*/
-{
-int page=(unsigned short)(x)>>12;
-return((memattr[page]&2)?mmio_in(x):memptr[page][(x)&4095]);
-}
-#endif
+#ifdef COPY_BANKSWITCH
 
-#define fetch2(x) ((fetch((x)+1)<<8)|fetch(x))
+/* load respects mmio */
+#  define load(x) ((memattr[(unsigned short)(x)>>12]&2)?mmio_in(x):visiblemem[x])
+#  ifdef SLOPPY_2
+#    define load2(x) ((memattr[(unsigned short)(x)>>12]&2)?\
+		      ((mmio_in((x)+1)<<8)|mmio_in(x)) :\
+		      *((unsigned short *)(visiblemem+(x))))
+#  else
+#    define load2(x) ((load((x)+1)<<8)|load(x))
+#  endif
+/* fetch ignores mmio */
+#  define fetch(x) (visiblemem[x])
+#  define fetch2(x) (*((unsigned short *)(visiblemem+(x))))
+/* store respects mmio */
+#  define store(x,y) ((memattr[(unsigned short)(x)>>12]&2)?mmio_out(x,y):\
+		      ((memattr[(unsigned short)(x)>>12])?(void)(visiblemem[x]=(y)):(void)0))
+#  ifdef SLOPPY_2
+#    define store2(x,y) ((memattr[(unsigned short)(x)>>12]&2)\
+			 ?(mmio_out(x,(y)&255), mmio_out((x)+1,(y)>>8))\
+			 :((memattr[(unsigned short)(x)>>12])\
+			   ?(*((unsigned short *)(visiblemem+x))=y):(void)0))
+#    define store2b(x,hi,lo) store2(x, ((hi)<<8) | (lo))
+#  else
+#    define store2b(x,hi,lo) (store(x,lo), store((x)+1, hi))
+#    define store2(x,y) store2b(x,(y)>>8,(y)&255)
+#  endif
+#define mempointer(x) (visiblemem+(x))
+
+#else /* no COPY_BANKSWITCH */
+
+/* both load and fetch respect mmio */
+#  ifdef HEAVY_LOAD
+#    define load(x) ((memattr[(unsigned short)(x)>>12]&2)?mmio_in(x):\
+		   memptr[(unsigned short)(x)>>12][(x)&4095])
+#  else
+     /* this is suboptimal but makes compiling realistic on a 16Mb machine
+      * with `gcc -O'. (which otherwise thrashes to hell and back) */
+static int load(int x)
+{
+  int page=(unsigned short)(x)>>12;
+  return((memattr[page]&2)?mmio_in(x):memptr[page][(x)&4095]);
+}
+#  endif
+#  define load2(x) ((load((x)+1)<<8)|load(x))
+#  define fetch(x) load(x)
+#  define fetch2(x) load2(x)
+
+#  define mempointer(x) (memptr[(unsigned short)(x)>>12] + ((x)&4095))
 
 #define store(x,y) do {\
           unsigned short off=(x)&4095;\
@@ -111,6 +146,5 @@ static void inline store2func(unsigned short ad,unsigned char b1,unsigned char b
 #define store2b(x,hi,lo) store2func(x,hi,lo)
 #endif
 
-#define bc ((b<<8)|c)
-#define de ((d<<8)|e)
-#define hl ((h<<8)|l)
+#endif /* no COPY_BANKSWITCH */
+

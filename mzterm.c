@@ -21,6 +21,15 @@
 #include <vgakeyboard.h>
 #include "mz700em.h"
 
+#ifdef linux
+#else
+#  define __DJGPP__
+/* FIXME */
+#endif
+#ifdef __DJGPP__
+#  include "scancode.h"
+#endif
+
 /* You need a special patched version of the DBASIC interpreter to use 
    the services provided in this file. */
 
