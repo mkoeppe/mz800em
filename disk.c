@@ -18,6 +18,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include <glob.h>
 #include <sys/stat.h>
@@ -219,6 +220,40 @@ static void DirectoryChange(char *dir, DirEntry *nw, DirEntry *old)
   }
 }
 
+int freadmz(int address, size_t size, size_t nmemb, FILE *f)
+{
+  int res;
+  if (memattr[address >> 12] == 1) { /* have RAM */
+    res = fread(memptr[address >> 12] + (address&4095), 1, size * nmemb, f);
+  }
+  else { /* maybe memory-mapped */
+    unsigned char *buf = malloc(size * nmemb);
+    int i;
+    res = fread(buf, 1, size * nmemb, f);
+    for (i = 0; i<size * nmemb /*res*/; i++) 
+      store(address + i, buf[i]);
+    free(buf);
+  }
+  return res;
+}
+
+int fwritemz(int address, size_t size, size_t nmemb, FILE *f)
+{
+  int res;
+  if (memattr[address >> 12] == 1) { /* have RAM */
+    res = fwrite(memptr[address >> 12] + (address&4095), 1, size * nmemb, f);
+  }
+  else { /* maybe memory-mapped */
+    unsigned char *buf = malloc(size * nmemb);
+    int i;
+    for (i = 0; i<size*nmemb; i++) 
+      buf[i] = fetch(address + i);
+    res = fwrite(buf, 1, size * nmemb, f);
+    free(buf);
+  }
+  return res;
+}
+
 int basicfloppyhandler(int address, int length, 
 		       int sector, int drive, int write)
 {
@@ -242,7 +277,7 @@ int basicfloppyhandler(int address, int length,
 	{
 	  FILE *f = fopen(name, "wb");
 	  if (!f) return 1;
-	  fwrite(mem+RAM_START+address, 1, length, f);
+	  fwritemz(address, 1, length, f);
 	  fclose(f);
 	}
 	return 0;
@@ -269,7 +304,7 @@ int basicfloppyhandler(int address, int length,
 	{
 	  FILE *f = fopen(name, "rb");
 	  if (!f) return 1;
-	  if (fread(mem+RAM_START+address, 1, length, f) != length) {
+	  if (freadmz(address, 1, length, f) != length) {
 	    fclose(f); 
 	    return 1; /* error */
 	  }
@@ -286,8 +321,8 @@ int basicfloppyhandler(int address, int length,
     int res;
     FILE *f = fopen(VirtualDisks[drive], write?"wb":"rb");
     fseek(f, sector*256, SEEK_SET);
-    if (write) res = fwrite(mem+RAM_START+address, 1, length, f);
-    else res = fread(mem+RAM_START+address, 1, length, f);
+    if (write) res = fwritemz(address, 1, length, f);
+    else res = freadmz(address, 1, length, f);
     fclose(f);
     return res != length;
   }
@@ -315,6 +350,6 @@ int basicfloppyhandler2(int tableaddress)
 {
   DriverData *D = (DriverData *) (mem+RAM_START+tableaddress);
 /*   if (!D->read) exit(1); */
-  return basicfloppyhandler(D->address, (int)D->sectorcount * 256 - 256 + D->bytecount,
+  return basicfloppyhandler(D->address, (int)D->sectorcount * 256 + D->bytecount,
 			    D->track*16 + D->sector - 1, D->driveandmode&3, !D->read);
 }
