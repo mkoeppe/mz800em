@@ -1178,7 +1178,7 @@ update_kybd()
   if(is_key_pressed(SCANCODE_APOSTROPHE))	keyports[0]|=0x02;	/* colon */
   if(is_key_pressed(SCANCODE_SEMICOLON))	keyports[0]|=0x04;
   if(is_key_pressed(SCANCODE_TAB))		keyports[0]|=0x10;
-  /*  if(is_key_pressed(#))	keyports[0]|=0x20;*/	/*arrow/pound*/
+  if(is_key_pressed(SCANCODE_LESS))	keyports[0]|=0x20;*/	/*arrow/pound*/
   if(is_key_pressed(SCANCODE_PAGEUP))		keyports[0]|=0x40;	/* graph */
   if(is_key_pressed(SCANCODE_GRAVE))	keyports[0]|=0x40; /* (alternative) */
   if(is_key_pressed(SCANCODE_PAGEDOWN))	keyports[0]|=0x80; /*blank key nr CR */
