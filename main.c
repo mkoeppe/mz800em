@@ -152,14 +152,9 @@ int funny_lpt_loopback = 0;
 extern char VirtualDisks[4][1024];
 extern int VirtualDiskIsDir[4];
 
-/* MZ700 colors */
-#ifdef PROPER_COLOURS
-/* these look very nearly the same as on the MZ... */
-int mzcol2vga[8]={0,1,4,5,2,3,14,15};
-#else
-/* ...but curiously, *these* tend to look better in practice. */
-int mzcol2vga[8]={0,9,12,13,10,11,14,15};
-#endif
+/* MZ700 colors; these are references to the MZ800 colors
+   defined in graphics.c */
+int mz7colors[8]={0,9,10,11,12,13,14,15};
 
 int pending_timer_interrupts;
 int pending_vbln_interrupts;
@@ -424,6 +419,7 @@ int main(argc,argv)
 
   screenon();
   vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
+  update_palette();
 
 #if defined(USE_RAWKEY)
   rawmode_init();
@@ -1230,8 +1226,8 @@ update_scrn()
 	       || pcgchange[(ptr[2048]&128 ? 256 : 0) + c]
 	       || refresh_screen)
 	      {
-		fg=mzcol2vga[(ptr[2048]>>4)&7];
-		bg=mzcol2vga[ ptr[2048]    &7];
+		fg=mz7colors[(ptr[2048]>>4)&7];
+		bg=mz7colors[ ptr[2048]    &7];
       
 		for(b=0;b<8;b++)
 		  {
