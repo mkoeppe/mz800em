@@ -1,3 +1,23 @@
+/* mz800em, an MZ800 emulator for Linux and Windows.
+ *
+ * Windows specific-code
+ * Copr. 1998 Matthias Koeppe <mkoeppe@mail.math.uni-magdeburg.de>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -47,7 +67,7 @@ void end_draw()
   }
 }
 
-void vga_drawscansegment(unsigned char *buffer, int x, int y, int pixels)
+void req_graphics_update(unsigned char *buffer, int x, int y, int pixels)
 {
   int xfac = 80 / mzbpl;
 #if 0
@@ -101,6 +121,35 @@ void do_update_graphics(void)
   }
 }
 
+void maybe_update_graphics()
+{
+  /* In Cygwin, updating at each graphics write is too expensive. So
+     we do the actual update in this function, which is called from
+     update_scrn. */
+  do_update_graphics();
+}
+
+void update_DMD(int a)
+{
+  vptr = 0;
+#if 0
+  directvideo = 0;
+#endif
+  if ((DMD & 4) != (a & 4)) {
+    /* switch between 320 and 640 mode */
+    if (a&4) { /* switch to 640 mode */
+      mzbpl = 80;
+    }
+    else { /* switch to 320 mode */
+      mzbpl = 40;
+    }
+    update_palette();
+  }
+  DMD = a & 7;
+  update_RF(RF);
+  update_WF(WF);
+}
+
 void update_palette()
 {
   int i;
@@ -125,6 +174,10 @@ void update_palette()
   update_rect.top = update_rect.left = 0;
   update_rect.right = 640, update_rect.bottom = 400;
   refresh_screen = 1;
+}
+
+void do_border()
+{
 }
 
 static LRESULT CALLBACK window_proc(HWND Wnd, UINT Message, 
@@ -219,6 +272,25 @@ void close_windows(void)
 {
   KillTimer(window_handle, 1);
   DestroyWindow(window_handle);
+}
+
+int is_key_pressed(int k)
+{
+  return GetAsyncKeyState(k);
+}
+     
+void scan_keyboard()
+{}
+
+void keyboard_update()
+{}
+
+void screen_init()
+{}
+
+void screen_exit()
+{
+  close_windows();
 }
 
 extern void dontpanic();

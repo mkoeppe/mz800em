@@ -33,6 +33,8 @@ extern int palette_block;
 extern int blackwhite;
 extern int mzcolors[16], mzgrays[16];
 
+extern int refresh_screen;
+
 void update_scrn();
 
 extern void update_WF(int a);
@@ -45,6 +47,14 @@ extern int graphics_read(int addr);
 extern void scroll();
 extern void init_scroll();
 extern void update_palette();
+extern void do_border(int color);
+
+extern void req_graphics_update(unsigned char *buffer, int x, int y, int pixels);
+extern void do_update_graphics();
+extern void begin_draw();
+extern void end_draw();
+extern void maybe_update_graphics();
+extern void toggle_blackwhite();
 
 /* mzterm services */
 

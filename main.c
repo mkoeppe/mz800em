@@ -31,11 +31,7 @@
 #ifdef linux
 #  define unixish
 #  include <signal.h>
-#  include <vga.h>
 #  include <vgakeyboard.h>
-#  if defined(USE_RAWKEY)
-#    include <rawkey.h>
-#  endif
 #  include <sys/stat.h>
 #  include <sys/soundcard.h>
 #  include <asm/io.h>  /* for LPT hack */
@@ -169,6 +165,11 @@ extern void mz80fReleaseTimeslice();
 #  define SET_INTERRUPTED(a) interrupted = a
 #endif
 
+void request_reset()
+{
+  SET_INTERRUPTED(2);
+}
+
 /* handle timer interrupt */
 void sighandler(a)
      int a;
@@ -283,44 +284,10 @@ void dontpanic(a)
 #endif
   if (cmtfile) fclose(cmtfile);
   if (!batch) {
-#if defined(__CYGWIN__)
-    close_windows();
-#else
-#  if defined(USE_RAWKEY)
-    rawmode_exit();
-#  else
-    keyboard_close();
-#  endif
-    vga_setmode(TEXT);
-#endif
+    screen_exit();
   }
   exit(0);
 }
-
-#if !defined(__CYGWIN__)
-void screenon()
-{
-  if (!batch) {
-    vga_setmode(G320x200x256);
-    vptr=vga_getgraphmem();
-    memset(vptr,0,320*200);
-    refresh_screen=1;
-  }
-  else {
-    vptr = malloc(256*1024);
-#if !defined(__CYGWIN__) && !defined(VGA16)
-    directvideo = 1;
-#endif
-  }
-}
-
-void screenoff()
-{
-  if (!batch) {
-    vga_setmode(TEXT);
-  }
-}
-#endif
 
 void dummy()
 {}
@@ -344,13 +311,7 @@ void playsound();
 
 
 
-#if defined(__CYGWIN__)
-int semi_main(argc, argv)
-#else
-int main(argc,argv)
-#endif
-     int argc;
-     char **argv;
+int semi_main(int argc, char **argv)
 {
   struct sigaction sa;
   struct itimerval itv;
@@ -416,9 +377,6 @@ int main(argc,argv)
 #  ifdef ALLOW_LPT_ACCESS
   ioperm(LPTPORT, 3, 1); /* allow LPT port access */
 #  endif
-#  if defined(VGA16)
-  ioperm(0x3c0, 16, 1); /* allow VGA port access */
-#  endif
 #endif
 
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
@@ -449,24 +407,7 @@ int main(argc,argv)
   init_scroll();
   out(0, 0xce, 8); /* set mz700 mode */
   
-#if !defined(__CYGWIN__)
-  vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
-  if (!batch) vga_init();
-  screenon();
-  update_palette();
-  if (!batch) {
-#  if defined(USE_RAWKEY)
-    rawmode_init();
-    set_switch_functions(screenoff,screenon);
-    allow_switch(1);
-    for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
-#  else
-    keyboard_init();
-    keyboard_seteventhandler(key_handler);
-    keyboard_translatekeys(DONT_CATCH_CTRLC);
-#  endif
-  }
-#endif
+  screen_init();
   
   if(argc>=2 && strcmp(argv[1],"-c")==0) { /* "copy rom to ram" */ 
     memcpy(mem + RAM_START, mem + ROM_START, 4096);
@@ -635,10 +576,7 @@ int main(argc,argv)
   /* shouldn't get here, but... */
   if(audio_fd!=-1) close(audio_fd);
 #if !defined(__CYGWIN__)
-#  if defined(USE_RAWKEY)
-  rawmode_exit();
-#  endif
-  vga_setmode(TEXT);
+  screen_exit();
 #endif
   exit(0);
 }
@@ -792,11 +730,14 @@ unsigned int in(h,l)
     }
     return ts;
 
-  case 0xce:
+  case 0xce: {
     /* MZ800 CRTC Status read */
-    /* 0x40 CRTC active (programs will wait) */
+    /* 0x40 CRTC active */
+    static int active = 0;
+    active ^= 0x40;
     /* 0x01 `MZ700/800' DIP switch state, always assume 1 */
-    return ts | 1;
+    return ts | active | 1;
+  }
 
   case 0xd0:
   case 0xd1:
@@ -1240,188 +1181,17 @@ void mmio_out(addr,val)
     }
 }
 
-void toggle_blackwhite()
-{
-  blackwhite = !blackwhite;
-  update_palette();
-}
-
-#if defined(__CYGWIN__)
-#  define is_key_pressed(k) GetAsyncKeyState(k)
-#  define scan_keyboard() (void)0
-#  define keyboard_update() (void)0
-#else
-#  if defined(USE_RAWKEY)
-#  else
-#   define is_key_pressed(k) key_state[k]
-#   define scan_keyboard keyboard_update
-void key_handler(int scancode, int press)
-{
-  if ((end+1) % CODERINGSIZE != front) {
-    codering[end] = press ? scancode : (scancode|0x8000);
-    if (press) coderingdowncount++;
-    end = (end+1) % CODERINGSIZE;
-  }
-  key_state[scancode&127] = press;
-}
-#  endif
-#endif
-
-void update_kybd()
-{
-  int y;
-
-  for(y=0;y<10;y++) keyports[y]=0;
-
-#if defined(__CYGWIN__)
-  if (GetFocus() != window_handle) {
-    /* no key press if not active */
-    for(y=0;y<10;y++) keyports[y]=255;
-    return;
-  }
-#endif
-
-#if defined(USE_RAWKEY)
-  for(y=0;y<5;y++) scan_keyboard();
-#else
-  keyboard_update();
-#endif
-
-  if(is_key_pressed(SCANCODE_F10))
-    {
-      while(is_key_pressed(SCANCODE_F10)) { usleep(20000); scan_keyboard(); };
-      dontpanic();	/* F10 = quit */
-    }
-
-  if(is_key_pressed(SCANCODE_F11))
-    {
-      while(is_key_pressed(SCANCODE_F11)) { usleep(20000); scan_keyboard(); };
-      SET_INTERRUPTED( 2);	/* F11 = reset */
-    }
-
-  if(is_key_pressed(SCANCODE_F12))
-    {
-      while(is_key_pressed(SCANCODE_F12)) { usleep(20000); scan_keyboard(); };
-      toggle_blackwhite(); 
-    }
-
-  /* this is a bit messy, but librawkey isn't too good at this sort
-   * of thing - it wasn't really intended to be used like this :-)
-   */
-
-  /* byte 0 */
-  if(is_key_pressed(SCANCODE_ENTER))	keyports[0]|=0x01;
-  if(is_key_pressed(SCANCODE_APOSTROPHE))	keyports[0]|=0x02;	/* colon */
-  if(is_key_pressed(SCANCODE_SEMICOLON))	keyports[0]|=0x04;
-  if(is_key_pressed(SCANCODE_TAB))		keyports[0]|=0x10;
-  if(is_key_pressed(SCANCODE_LESS))	keyports[0]|=0x20;	/*arrow/pound*/
-  if(is_key_pressed(SCANCODE_PAGEUP))		keyports[0]|=0x40;	/* graph */
-  if(is_key_pressed(SCANCODE_GRAVE))	keyports[0]|=0x40; /* (alternative) */
-  if(is_key_pressed(SCANCODE_PAGEDOWN))	keyports[0]|=0x80; /*blank key nr CR */
-
-  /* byte 1 */
-  if(is_key_pressed(SCANCODE_BRACKET_RIGHT))	keyports[1]|=0x08;
-  if(is_key_pressed(SCANCODE_BRACKET_LEFT))	keyports[1]|=0x10;
-  if(is_key_pressed(SCANCODE_F7))		keyports[1]|=0x20;	/* @ */
-  if(is_key_pressed(SCANCODE_Z))	keyports[1]|=0x40;
-  if(is_key_pressed(SCANCODE_Y))	keyports[1]|=0x80;
-
-  /* byte 2 */
-  if(is_key_pressed(SCANCODE_X))	keyports[2]|=0x01;
-  if(is_key_pressed(SCANCODE_W))	keyports[2]|=0x02;
-  if(is_key_pressed(SCANCODE_V))	keyports[2]|=0x04;
-  if(is_key_pressed(SCANCODE_U))	keyports[2]|=0x08;
-  if(is_key_pressed(SCANCODE_T))	keyports[2]|=0x10;
-  if(is_key_pressed(SCANCODE_S))	keyports[2]|=0x20;
-  if(is_key_pressed(SCANCODE_R))	keyports[2]|=0x40;
-  if(is_key_pressed(SCANCODE_Q))	keyports[2]|=0x80;
-
-  /* byte 3 */
-  if(is_key_pressed(SCANCODE_P))	keyports[3]|=0x01;
-  if(is_key_pressed(SCANCODE_O))	keyports[3]|=0x02;
-  if(is_key_pressed(SCANCODE_N))	keyports[3]|=0x04;
-  if(is_key_pressed(SCANCODE_M))	keyports[3]|=0x08;
-  if(is_key_pressed(SCANCODE_L))	keyports[3]|=0x10;
-  if(is_key_pressed(SCANCODE_K))	keyports[3]|=0x20;
-  if(is_key_pressed(SCANCODE_J))	keyports[3]|=0x40;
-  if(is_key_pressed(SCANCODE_I))	keyports[3]|=0x80;
-
-  /* byte 4 */
-  if(is_key_pressed(SCANCODE_H))	keyports[4]|=0x01;
-  if(is_key_pressed(SCANCODE_G))	keyports[4]|=0x02;
-  if(is_key_pressed(SCANCODE_F))	keyports[4]|=0x04;
-  if(is_key_pressed(SCANCODE_E))	keyports[4]|=0x08;
-  if(is_key_pressed(SCANCODE_D))	keyports[4]|=0x10;
-  if(is_key_pressed(SCANCODE_C))	keyports[4]|=0x20;
-  if(is_key_pressed(SCANCODE_B))	keyports[4]|=0x40;
-  if(is_key_pressed(SCANCODE_A))	keyports[4]|=0x80;
-
-  /* byte 5 */
-  if(is_key_pressed(SCANCODE_8))	keyports[5]|=0x01;
-  if(is_key_pressed(SCANCODE_7))	keyports[5]|=0x02;
-  if(is_key_pressed(SCANCODE_6))	keyports[5]|=0x04;
-  if(is_key_pressed(SCANCODE_5))	keyports[5]|=0x08;
-  if(is_key_pressed(SCANCODE_4))	keyports[5]|=0x10;
-  if(is_key_pressed(SCANCODE_3))	keyports[5]|=0x20;
-  if(is_key_pressed(SCANCODE_2))	keyports[5]|=0x40;
-  if(is_key_pressed(SCANCODE_1))	keyports[5]|=0x80;
-
-  /* byte 6 */
-  if(is_key_pressed(SCANCODE_PERIOD))	keyports[6]|=0x01;
-  if(is_key_pressed(SCANCODE_COMMA))	keyports[6]|=0x02;
-  if(is_key_pressed(SCANCODE_9))	keyports[6]|=0x04;
-  if(is_key_pressed(SCANCODE_0))	keyports[6]|=0x08;
-  if(is_key_pressed(SCANCODE_SPACE))	keyports[6]|=0x10;
-  if(is_key_pressed(SCANCODE_MINUS))	keyports[6]|=0x20;
-  if(is_key_pressed(SCANCODE_EQUAL))	keyports[6]|=0x40; /* arrow/tilde */
-  if(is_key_pressed(SCANCODE_BACKSLASH))	keyports[6]|=0x80;
-
-  /* byte 7 */
-  if(is_key_pressed(SCANCODE_SLASH))	keyports[7]|=0x01;
-  if(is_key_pressed(SCANCODE_F8))		keyports[7]|=0x02;	/* ? */
-  if(is_key_pressed(SCANCODE_CURSORLEFT)
-     || is_key_pressed(SCANCODE_CURSORBLOCKLEFT))	keyports[7]|=0x04;
-  if(is_key_pressed(SCANCODE_CURSORRIGHT)
-     || is_key_pressed(SCANCODE_CURSORBLOCKRIGHT))	keyports[7]|=0x08;
-  if(is_key_pressed(SCANCODE_CURSORDOWN)
-     || is_key_pressed(SCANCODE_CURSORBLOCKDOWN))	keyports[7]|=0x10;
-  if(is_key_pressed(SCANCODE_CURSORUP)
-     || is_key_pressed(SCANCODE_CURSORBLOCKUP))		keyports[7]|=0x20;
-  if(is_key_pressed(SCANCODE_REMOVE))		keyports[7]|=0x40;
-  if(is_key_pressed(SCANCODE_INSERT))		keyports[7]|=0x80;
-
-  /* byte 8 */
-#ifdef __CYGWIN__
-  if (is_key_pressed(VK_SHIFT)) keyports[8]|=0x01;
-  if (is_key_pressed(VK_CONTROL)) keyports[8]|=0x40;
-#endif
-  if(is_key_pressed(SCANCODE_LEFTSHIFT))		keyports[8]|=0x01;
-  if(is_key_pressed(SCANCODE_RIGHTSHIFT))		keyports[8]|=0x01;
-  if(is_key_pressed(SCANCODE_LEFTCONTROL))		keyports[8]|=0x40;
-  if(is_key_pressed(SCANCODE_BACKSPACE))		keyports[8]|=0x80;	/* break */
-
-  /* byte 9 */
-  if(is_key_pressed(SCANCODE_F5))		keyports[9]|=0x08;
-  if(is_key_pressed(SCANCODE_F4))		keyports[9]|=0x10;
-  if(is_key_pressed(SCANCODE_F3))		keyports[9]|=0x20;
-  if(is_key_pressed(SCANCODE_F2))		keyports[9]|=0x40;
-  if(is_key_pressed(SCANCODE_F1))		keyports[9]|=0x80;
-
-  /* now invert */
-  for(y=0;y<10;y++) keyports[y]^=255;
-}
-
 void fix_tstates()
 {
   tstates=0;
   if(do_sound)
     playsound();
-  else
-#if defined(__CYGWIN__)
+  else {
     handle_messages(); /* FIXME */
-#else
+#if !defined(__CYGWIN__)
     pause();
 #endif
+  }
 }
 
 void do_interrupt()
@@ -1432,9 +1202,7 @@ void do_interrupt()
   if (!batch) {
     update_scrn();
     update_kybd();
-#if defined(__CYGWIN__)
     handle_messages();
-#endif
   }
   if(interrupted<2) interrupted = 0;
 }

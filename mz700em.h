@@ -22,11 +22,28 @@ extern unsigned char mem[];
 extern int codering[CODERINGSIZE];
 extern int front, end;
 extern int coderingdowncount;
+extern int scrolllock;
 #if !defined(USE_RAWKEY)
 extern unsigned char key_state[128];
 #endif
+extern unsigned char keyports[10];
+int getmzkey();
+int keypressed();
+extern int is_key_pressed(int k);
+extern void scan_keyboard();
+extern int keyboard_update();
+extern void update_kybd();
+
+/* misc */
 
 extern int batch;
 extern int refresh_screen;
 extern int retrace;
 extern int bsmode;
+
+void dontpanic();
+void request_reset();
+extern void screen_init();
+extern void screen_exit();
+extern void handle_messages();
+
