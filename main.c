@@ -136,6 +136,7 @@ void key_handler(int scancode, int press);
 #endif
 
 unsigned char vidmem_old[4096];
+unsigned char pcgram_old[4096];
 int refresh_screen=1;
 
 FILE *imagefile;
@@ -1135,7 +1136,8 @@ update_scrn()
   static int count=0;
   unsigned char *pageptr;
   int x,y,mask,a,b,c,d;
-  unsigned char *ptr,*videoptr,*oldptr,*tmp,fg,bg;
+  unsigned char *ptr,*videoptr,*oldptr,*pcgptr,*tmp,fg,bg;
+  char pcgchange[512];
 
   retrace=1;
 
@@ -1168,20 +1170,37 @@ update_scrn()
     /*   if(count<scrn_freq) return(0); else count=0; */
 
 #ifdef COPY_BANKSWITCH
-    if (memptr[13] == mem+VID_START) videoptr = mem+RAM_START+0xD000;
+    if (memptr[13] == mem+VID_START) videoptr = visiblemem+0xD000;
     else videoptr = mem+VID_START;
+    if (memptr[12] == mem+PCGRAM_START) pcgptr = visiblemem+0xC000;
+    else pcgptr = mem+PCGRAM_START;
 #else
     videoptr = mem+VID_START;
+    pcgptr = mem+PCGRAM_START;
 #endif
     ptr = videoptr;
     oldptr=vidmem_old;
+
+    for (y=0; y<512; y++) {
+      pcgchange[y] = pcgptr[8*y]!=pcgram_old[8*y]
+	|| pcgptr[8*y+1]!=pcgram_old[8*y+1]
+	|| pcgptr[8*y+2]!=pcgram_old[8*y+2]
+	|| pcgptr[8*y+3]!=pcgram_old[8*y+3]
+	|| pcgptr[8*y+4]!=pcgram_old[8*y+4]
+	|| pcgptr[8*y+5]!=pcgram_old[8*y+5]
+	|| pcgptr[8*y+6]!=pcgram_old[8*y+6]
+	|| pcgptr[8*y+7]!=pcgram_old[8*y+7];
+    }
 
     for(y=0;y<25;y++)
       {
 	for(x=0;x<40;x++,ptr++,oldptr++)
 	  {
 	    c=*ptr;
-	    if(*oldptr!=c || oldptr[2048]!=ptr[2048] || refresh_screen)
+	    if(*oldptr!=c 
+	       || oldptr[2048]!=ptr[2048] 
+	       || pcgchange[(ptr[2048]&128 ? 256 : 0) + c]
+	       || refresh_screen)
 	      {
 		fg=mzcol2vga[(ptr[2048]>>4)&7];
 		bg=mzcol2vga[ ptr[2048]    &7];
@@ -1200,6 +1219,7 @@ update_scrn()
 
     /* now, copy new to old for next time */
     memcpy(vidmem_old, videoptr, 4096);
+    memcpy(pcgram_old, pcgptr, 4096);
   }
   refresh_screen=0;
 }
