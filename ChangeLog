@@ -1,3 +1,10 @@
+2002-01-22  Matthias Koeppe  <mkoeppe@mail.math.uni-magdeburg.de>
+
+	Version 0.8
+
+	* graphics.c, mz800gtk.c, mz800vga.c, pckey.c: More work on the
+	GTK+ frontend.
+
 2002-01-21  Matthias Koeppe  <mkoeppe@mail.math.uni-magdeburg.de>
 
 	* Makefile, README, TODO, mz800gtk.c, mz800vga.c, pckey.c,

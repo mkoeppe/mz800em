@@ -36,7 +36,7 @@
 #include "mz700em.h"
 #include "graphics.h"
 
-#include "nc100.xpm"
+/*#include "nc100.xpm"*/
 
 
 /* GTK+ border width in scrolled window (not counting scrollbars).
@@ -178,7 +178,9 @@ void update_palette()
       else color = colors[i];
     }
     else color = colors[i];
-    xcolors[i] = ((guint32) color) << 2;
+    xcolors[i] = (((((guint32) color) & 0x3f) << 2)
+		  | ((((guint32) color) & 0x3f00) << 10)
+		  | ((((guint32) color) & 0x3f0000) >> 6));
   }
   req_screen_update();
   refresh_screen = 1;
@@ -272,8 +274,18 @@ if(ry+rh>oy+vsize+ybw*2) rh=oy+vsize+ybw*2-ry;
 /* white out the drawing area first (to draw any borders) */
 if(rw>0 && rh>0)
   {
-  gdk_draw_rectangle(widget->window,drawing_area->style->black_gc,TRUE,
-  	rx,ry,rw,rh);
+    /* FIXME: Alloc Gdk colors and a gc = gdk_gc_new(widget->window)
+       then use this gc to draw the border with BCOL ...
+    GdkColor color;
+    color.red = 65535;
+    color.blue = 0;
+    color.green = 0;
+    color.pixel = 255*65536;
+    gdk_color_alloc(gtk_widget_get_colormap(widget), &color);
+    gdk_gc_set_foreground(drawing_area->style->black_gc, &color);
+    */
+    gdk_draw_rectangle(widget->window,drawing_area->style->black_gc,TRUE,
+		       rx,ry,rw,rh);
   }
 
 /* now draw part of image over that if needed */
@@ -288,9 +300,8 @@ if(w>0 && h>0)
 return(FALSE);
 }
 
-static int capslock = 0, numlock = 0;
 int scrolllock = 0;
-static int shift = 0, ctrl = 0, alt = 0, rightshift = 0, backspace = 0;
+static int shift = 0, ctrl = 0, rightshift = 0, backspace = 0;
 
 
 void do_mzterm_key(guint keyval)
@@ -317,17 +328,33 @@ void do_mzterm_key(guint keyval)
       case 'v': keyval = 0xab; break;  case 'w': keyval = 0xa3; break;  case 'x': keyval = 0x9b; break;
       case 'y': keyval = 0xbd; break;  case 'z': keyval = 0xa2; break;  case '|': keyval = 0xfd; break;
       case '{': keyval = 0xbe; break;  case '}': keyval = 0x80; break;  case '~': keyval = 0x94; break;
+      case '`': keyval = 0x93; break;
       }
     }
     else {
       switch (keyval) {
-	/* dubious: */
-      case 0216: keyval = 0xb9; break;
-      case 0231: keyval = 0xa8; break;  case 0232: keyval = 0xb2; break;  case 0204: keyval = 0xbb; break;
-      case 0224: keyval = 0xba; break;  case 0201: keyval = 0xad; break;  case 0xe1: keyval = 0xae; break;
-      case 0xe3: keyval = 0xff; break;
+	/* latin-1 letters on German keyboards */
+      case 0xa7:
+	keyval = 0xc6; break;
+      case 0xb3:
+	keyval = 0xfc; break;
+      case 0xdf:
+	keyval = 0xae; break;
+      case 0xc4:
+	keyval = 0xb9; break;
+      case 0xd6:
+	keyval = 0xa8; break; 
+      case 0xdc: 
+	keyval = 0xb2; break;
+      case 0xe4:
+	keyval = 0xbb; break;
+      case 0xf6:
+	keyval = 0xba; break;
+      case 0xfc:
+	keyval = 0xad; break;
+      case 0xb0:
+	keyval = 0x7b; break;
 	/* control */
-
       case GDK_Escape:
 	keyval = 0x1b; break;
       case GDK_BackSpace:
@@ -368,60 +395,199 @@ void do_mzterm_key(guint keyval)
 	keyval = rightshift ? 0xd2 : 0x13; break;
       case GDK_Down: case GDK_KP_Down:
 	keyval = rightshift ? 0xd0 : 0x11; break;
+      case GDK_KP_0: case GDK_KP_1: case GDK_KP_2:
+      case GDK_KP_3: case GDK_KP_4: case GDK_KP_5:
+      case GDK_KP_6: case GDK_KP_7: case GDK_KP_8:
+      case GDK_KP_9:
+	keyval = (keyval - GDK_KP_0) + '0'; break;
+      case GDK_KP_Divide:
+	keyval = '/'; break;
+      case GDK_KP_Multiply:
+	keyval = '*'; break;
+      case GDK_KP_Add:
+	keyval = '+'; break;
+      case GDK_KP_Subtract:
+	keyval = '-'; break;
+      case GDK_KP_Decimal:
+	keyval = '.'; break;
       default:
-	fprintf(stderr, "unknown keyval %x\n", keyval);
+	/*fprintf(stderr, "unknown keyval %x\n", keyval);*/
 	return;
       }
     }
     
-    codering[end] = keyval; /*press ? scancode : (scancode|0x8000);
-				     if (press) coderingdowncount++; */
+    codering[end] = keyval;
     end = (end+1) % CODERINGSIZE;
   }
 }
 	
-struct keytable_tag
-  {
-  unsigned char port,mask;
-  };
+int decode_gdk_keyval(guint keyval)
+{
+  switch (keyval) {
+  case GDK_Return:
+    return (0 << 8) | 0x01;
+  case '\'': case '\"':
+    return (0 << 8) | 0x02;	/* colon */
+  case ';': case ':':
+    return (0 << 8) | 0x04;
+  case GDK_Tab:
+    return (0 << 8) | 0x10;
+  case GDK_F6:
+    return (0 << 8) | 0x20;	/*arrow/pound*/
+  case GDK_Prior:
+    return (0 << 8) | 0x40;	/* graph */
+  case '`':
+    return (0 << 8) | 0x40; /* (alternative) */
+  case GDK_Next:
+    return (0 << 8) | 0x80; /*blank key nr CR */
 
+    /* byte 1 */
+  case ']': case '}':
+    return (1 << 8) | 0x08;
+  case '[': case '{':
+    return (1 << 8) | 0x10;
+  case GDK_F7:
+    return (1 << 8) | 0x20;	/* @ */
+  case 'z': case 'Z':
+    return (1 << 8) | 0x40;
+  case 'y': case 'Y':
+    return (1 << 8) | 0x80;
 
-/* remember, this table is ignoring shifts... */
-static struct keytable_tag nc100_keytable[]={
-/*  SP      !        "        #        $        %        &        '  */
-{1,0x08},{2,0x04},{3,0x01},{6,0x10},{4,0x01},{1,0x40},{7,0x02},{7,0x04},
-/*  (       )        *        +        ,        -        .        /  */
-{9,0x02},{9,0x01},{8,0x01},{7,0x01},{8,0x80},{8,0x02},{9,0x80},{6,0x20},
-/*  0       1        2        3        4        5        6        7  */
-{9,0x01},{2,0x04},{3,0x02},{3,0x01},{4,0x01},{1,0x40},{6,0x01},{7,0x02},
-/*  8       9        :        ;        <        =        >        ?  */
-{8,0x01},{9,0x02},{9,0x08},{9,0x08},{8,0x80},{7,0x01},{9,0x80},{6,0x20},
-/*  @       A        B        C        D        E        F        G  */
-{8,0x10},{4,0x10},{5,0x04},{5,0x80},{3,0x80},{3,0x10},{4,0x80},{5,0x40},
-/*  H       I        J        K        L        M        N        O  */
-{6,0x40},{8,0x20},{8,0x40},{7,0x80},{9,0x20},{7,0x40},{6,0x80},{9,0x40},
-/*  P       Q        R        S        T        U        V        W  */
-{9,0x08},{3,0x04},{4,0x40},{3,0x40},{5,0x10},{7,0x20},{5,0x08},{3,0x08},
-/*  X       Y        Z        [        \        ]        ^        _  */
-{4,0x08},{5,0x20},{4,0x04},{8,0x08},{7,0x04},{8,0x04},{6,0x01},{8,0x02},
-/*  `       a        b        c        d        e        f        g  */
-{7,0x10},{4,0x10},{5,0x04},{5,0x80},{3,0x80},{3,0x10},{4,0x80},{5,0x40},
-/*  h       i        j        k        l        m        n        o  */
-{6,0x40},{8,0x20},{8,0x40},{7,0x80},{9,0x20},{7,0x40},{6,0x80},{9,0x40},
-/*  p       q        r        s        t        u        v        w  */
-{9,0x08},{3,0x04},{4,0x40},{3,0x40},{5,0x10},{7,0x20},{5,0x08},{3,0x08},
-/*  x       y        z        {        |        }        ~       DEL */
-{4,0x08},{5,0x20},{4,0x04},{8,0x08},{7,0x04},{8,0x04},{6,0x10},{9,0x04}
-};
+    /* byte 2 */
+  case 'x': case 'X':
+    return (2 << 8) | 0x01;
+  case 'w': case 'W':
+    return (2 << 8) | 0x02;
+  case 'v': case 'V':
+    return (2 << 8) | 0x04;
+  case 'u': case 'U':
+    return (2 << 8) | 0x08;
+  case 't': case 'T':
+    return (2 << 8) | 0x10;
+  case 's': case 'S':
+    return (2 << 8) | 0x20;
+  case 'r': case 'R':
+    return (2 << 8) | 0x40;
+  case 'q': case 'Q':
+    return (2 << 8) | 0x80;
 
+    /* byte 3 */
+  case 'p': case 'P':
+    return (3 << 8) | 0x01;
+  case 'o': case 'O':
+    return (3 << 8) | 0x02;
+  case 'n': case 'N':
+    return (3 << 8) | 0x04;
+  case 'm': case 'M':
+    return (3 << 8) | 0x08;
+  case 'l': case 'L':
+    return (3 << 8) | 0x10;
+  case 'k': case 'K':
+    return (3 << 8) | 0x20;
+  case 'j': case 'J':
+    return (3 << 8) | 0x40;
+  case 'i': case 'I':
+    return (3 << 8) | 0x80;
 
-static struct keytable_tag *keytable=nc100_keytable;
+    /* byte 4 */
+  case 'h': case 'H':
+    return (4 << 8) | 0x01;
+  case 'g': case 'G':
+    return (4 << 8) | 0x02;
+  case 'f': case 'F':
+    return (4 << 8) | 0x04;
+  case 'e': case 'E':
+    return (4 << 8) | 0x08;
+  case 'd': case 'D':
+    return (4 << 8) | 0x10;
+  case 'c': case 'C':
+    return (4 << 8) | 0x20;
+  case 'b': case 'B':
+    return (4 << 8) | 0x40;
+  case 'a': case 'A':
+    return (4 << 8) | 0x80;
+ 
+    /* byte 5 */
+  case '8': 
+    return (5 << 8) | 0x01;
+  case '7': 
+    return (5 << 8) | 0x02;
+  case '6': 
+    return (5 << 8) | 0x04;
+  case '5': 
+    return (5 << 8) | 0x08;
+  case '4': 
+    return (5 << 8) | 0x10;
+  case '3': 
+    return (5 << 8) | 0x20;
+  case '2': 
+    return (5 << 8) | 0x40;
+  case '1': 
+    return (5 << 8) | 0x80;
 
-/* FIXME: The keyports are still nc100em, not mz800em */
+    /* byte 6 */
+  case '.': case '>':
+    return (6 << 8) | 0x01;
+  case ',': case '<':
+    return (6 << 8) | 0x02;
+  case '9': case '(':
+    return (6 << 8) | 0x04;
+  case '0': case ')':
+    return (6 << 8) | 0x08;
+  case ' ':
+    return (6 << 8) | 0x10;
+  case '-': case '_':
+    return (6 << 8) | 0x20;
+  case '=': case '+':
+    return (6 << 8) | 0x40; /* arrow/tilde */
+  case '\\': case '|':
+    return (6 << 8) | 0x80;
+
+    /* byte 7 */
+  case '/': case '?':
+    return (7 << 8) | 0x01;
+  case GDK_F8: 	return (7 << 8) | 0x02;	/* ? */
+  case GDK_Left: case GDK_KP_Left:
+    return (7 << 8) | 0x04;
+  case GDK_Right: case GDK_KP_Right:
+    return (7 << 8) | 0x08;
+  case GDK_Down: case GDK_KP_Down:
+    return (7 << 8) | 0x10;
+  case GDK_Up: case GDK_KP_Up:
+    return (7 << 8) | 0x20;
+  case GDK_Delete: case GDK_KP_Delete:
+    return (7 << 8) | 0x40;
+  case GDK_Insert: case GDK_KP_Insert:
+    return (7 << 8) | 0x80;
+
+    /* byte 8 */
+  case GDK_Shift_L: case GDK_Shift_R:
+    return (8 << 8) | 0x01;
+  case GDK_Control_L: case GDK_Control_R:
+    return (8 << 8) | 0x40;
+  case GDK_BackSpace:
+    return (8 << 8) | 0x80;	/* break */
+
+    /* byte 9 */
+  case GDK_F5:
+    return (9 << 8) | 0x08;
+  case GDK_F4:
+    return (9 << 8) | 0x10;
+  case GDK_F3:
+    return (9 << 8) | 0x20;
+  case GDK_F2:
+    return (9 << 8) | 0x40;
+  case GDK_F1:
+    return (9 << 8) | 0x80;
+  default:
+    return 0;
+  }
+}
+
 static gint key_press_event(GtkWidget *widget,GdkEventKey *event)
 {
-switch(event->keyval)
-  {
+  int line_and_mask;
+  switch(event->keyval) {
   case GDK_F10:
     dontpanic();
     break;
@@ -431,218 +597,51 @@ switch(event->keyval)
   case GDK_F12:
     toggle_blackwhite();
     break;
-  /* Insert = Function, but allow super/hyper to act as Function too. */
-  case GDK_Insert:
-  case GDK_Super_L: case GDK_Super_R:
-  case GDK_Hyper_L: case GDK_Hyper_R:
-    break;
-
-  case GDK_Return: 
-    break;
   case GDK_Control_L:
   case GDK_Control_R:
     ctrl = 1;
     break;
   case GDK_Shift_L:
     shift = 1;
-    keyports[8] &= ~0x01;
     break;
   case GDK_Shift_R:
     rightshift = shift = 1;
-    keyports[8] &= ~0x01;
-    break;
-  case GDK_Alt_L: case GDK_Alt_R:
-  case GDK_Meta_L: case GDK_Meta_R:
-    alt = 1;
-    break;
-  case GDK_Caps_Lock:
     break;
   case GDK_BackSpace:
     backspace = 1;
-    keyports[8] &= ~0x80;
     break;
-  case GDK_Delete:
-    break;
-  case GDK_Escape:
-    break;
-  case GDK_Tab:
-    break;
-  case GDK_Up:
-    break;
-  case GDK_Down:
-    break;
-  case GDK_Left:
-    break;
-  case GDK_Right:
-    break;
-  case GDK_minus:
-    break;
-  case GDK_underscore:
-    break;
-  case GDK_equal:
-    break;
-  case GDK_plus:
-    break;
-  case GDK_semicolon:
-    break;
-  case GDK_colon:
-    break;
-  case GDK_apostrophe:
-    break;
-  case GDK_quotedbl:
-    break;
-  case GDK_exclam:
-    break;
-  case GDK_at:
-    break;
-  case GDK_numbersign:
-    break;
-  case GDK_sterling:
-    break;
-  case GDK_dollar:
-    
-  case GDK_percent:
-    break;
-  case GDK_asciicircum:
-    break;
-  case GDK_ampersand:
-    break;
-  case GDK_asterisk:
-    break;
-  case GDK_parenleft:
-    break;
-  case GDK_parenright:
-    break;
-  case GDK_comma:
-    break;
-  case GDK_less:
-    break;
-  case GDK_period:
-    break;
-  case GDK_greater:
-    break;
-  case GDK_slash:
-    break;
-  case GDK_question:
-    break;
-  case GDK_backslash: case GDK_bar:
-    break;
-  
-  default:
-    /*    if(event->keyval>=32 && event->keyval<128)
-      keyports[keytable[event->keyval-32].port]|=
-      keytable[event->keyval-32].mask;*/
   }
- do_mzterm_key(event->keyval);
-
-return(TRUE);
+  line_and_mask = decode_gdk_keyval(event->keyval);
+  if (line_and_mask) 
+    keyports[line_and_mask >> 8] &= ~(line_and_mask&0xff);
+  do_mzterm_key(event->keyval);
+  return(TRUE);
 }
 
 
 static gint key_release_event(GtkWidget *widget,GdkEventKey *event)
 {
-switch(event->keyval)
-  {
-  case GDK_Insert:
-  case GDK_Super_L: case GDK_Super_R:
-  case GDK_Hyper_L: case GDK_Hyper_R:
-    break;
-
-  case GDK_Return: 
-    break;
+  int line_and_mask;
+  switch(event->keyval) {
   case GDK_Control_L:
   case GDK_Control_R:
     ctrl = 0;
     break;
   case GDK_Shift_L:
     shift = 0;
-    keyports[8] |= 0x01;
     break;
   case GDK_Shift_R:
     shift = rightshift = 0;
-    keyports[8] |= 0x01;
-    break;
-  case GDK_Alt_L: case GDK_Alt_R:
-  case GDK_Meta_L: case GDK_Meta_R:
-    alt = 0;
-    break;
-  case GDK_Caps_Lock:
     break;
   case GDK_BackSpace:
     backspace = 0;
-    keyports[8] |= 0x80;
     break;
-  case GDK_Delete:
-    break;
-  case GDK_Escape:
-    break;
-  case GDK_Tab:
-    break;
-  case GDK_Up:
-    break;
-  case GDK_Down:
-    break;
-  case GDK_Left:
-    break;
-  case GDK_Right:
-    break;
-  case GDK_minus:
-    break;
-  case GDK_underscore:
-    break;
-  case GDK_equal:
-    break;
-  case GDK_plus:
-    break;
-  case GDK_semicolon:
-    break;
-  case GDK_colon:
-    break;
-  case GDK_apostrophe:
-    break;
-  case GDK_quotedbl:
-    break;
-  case GDK_exclam:
-    break;
-  case GDK_at:
-    break;
-  case GDK_numbersign:
-    break;
-  case GDK_sterling:
-    break;
-  case GDK_dollar:
-    break;
-  case GDK_percent:
-    break;
-  case GDK_asciicircum:
-    break;
-  case GDK_ampersand:
-    break;
-  case GDK_asterisk:
-    break;
-  case GDK_parenleft:
-    break;
-  case GDK_parenright:
-    break;
-  case GDK_comma:
-    break;
-  case GDK_less:
-    break;
-  case GDK_period:
-    break;
-  case GDK_greater:
-    break;
-  case GDK_slash:
-    break;
-  case GDK_question:
-    break;
-  case GDK_backslash: case GDK_bar:
-    break;
-
-  default:
   }
+  line_and_mask = decode_gdk_keyval(event->keyval);
+  if (line_and_mask) 
+    keyports[line_and_mask >> 8] |= (line_and_mask&0xff);
 
-return(TRUE);
+  return(TRUE);
 }
 
 int getmzkey()
@@ -681,11 +680,14 @@ void update_kybd()
 
 static gint focus_change_event(GtkWidget *widget,GdkEventFocus *event)
 {
+  /*
 if(event->in)
   gdk_key_repeat_disable(),need_keyrep_restore=1;
 else
   gdk_key_repeat_restore(),need_keyrep_restore=0;
 
+  */
+  
 return(FALSE);	/* just in case anything else needs it */
 }
 
@@ -737,8 +739,8 @@ int win_width,win_height;
    xscale=yscale/2;
    if (xscale<1) {
      xscale = 1;
-     yscale = 2*xscale;
    }
+   yscale = 2*xscale;
  }
  
 /* grey out buttons which wouldn't do anything now */
@@ -779,13 +781,19 @@ return(TRUE);
 
 static gint cb_scale_up(GtkWidget *widget,gpointer junk)
 {
-if(yscale<4)
-  {
-  yscale++;
-  scale_change_fixup();
+  if (mzbpl == 40) {
+    if (yscale<4) {
+      yscale++;
+      scale_change_fixup();
+    }
   }
-
-return(TRUE);
+  else {
+    if (yscale<3) {
+      yscale+=2;
+      scale_change_fixup();
+    }
+  }
+  return(TRUE);
 }
 
 
@@ -972,9 +980,10 @@ set_size();
 
 
 /* set icon */
+/*
 icon=gdk_pixmap_create_from_xpm_d(window->window,&mask,NULL,nc100_xpm);
 gdk_window_set_icon(window->window,NULL,icon,mask);
-
+*/
 
 /* allocate initial backing image for drawing area */
 image=gdk_image_new(GDK_IMAGE_FASTEST,gdk_visual_get_system(),hsize,vsize);
@@ -995,6 +1004,7 @@ whitepix=gcval.foreground.pixel;
 
 void handle_messages()
 {
+  maybe_update_graphics();
   while(/*!signal_int_flag && */ gtk_events_pending())
     gtk_main_iteration();
 }

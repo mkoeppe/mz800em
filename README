@@ -36,8 +36,12 @@ Description
 -----------
 
 `mz800em' is a Sharp MZ800 emulator. Its primary target are GNU/Linux
-systems; it uses svgalib there. It has also been ported to Windows-32
-systems, using Cygnus Solution's cygwin32 library.
+systems; originally it used svgalib there, but now it also supports X
+via the GTK+ toolkit.  The GTK+ version might run on other UNIX
+flavors as well (but probably some signal stuff needs to be changed).
+
+`mz800em' has also been ported to Windows-32 systems, using Cygnus
+Solution's cygwin32 library.
 
 You can run MZ80K, MZ700 and MZ800 programs. It supports most m/c
 programs and games. There are also methods for loading BASIC programs
@@ -130,12 +134,7 @@ are some ideas taken from README-700:
 History etc.
 ------------
 
-Mz800em is based on Mz700em by Russell Marks. Some of the changes at
-the Z80 kernel for version 0.5 (COPY_BANKSWITCH and fetch/read
-distinction), which led to a faster kernel, were inspired by a deep
-view into SHARP.EXE, a very efficient MZ-800 emulator for DOS machines
-by Jaroslav Kysela <kysela@virgo.jcu.cz>, which is unfortunately no
-longer supported by the author. See ChangeLog for details.
+Mz800em is based on Mz700em by Russell Marks. 
 
 Russell writes:
 
@@ -146,6 +145,13 @@ Russell writes:
   any correspondence regarding mz700em should be to me, as Ian hasn't
   had anything else to do with it and probably hasn't even heard of
   the MZ700.
+
+Some of the changes at the Z80 kernel for version 0.5 (COPY_BANKSWITCH
+and fetch/read distinction), which led to a faster kernel, were
+inspired by a deep view into SHARP.EXE, a very efficient MZ-800
+emulator for DOS machines by Jaroslav Kysela <kysela@virgo.jcu.cz>,
+which is unfortunately no longer supported by the author. See
+ChangeLog for details.
 
 Mz800em now optionally works with MZ80, the `Multi-Z80 emulator' by
 Neil Bradley (ftp://ftp.synthcom.com/pub/emulators/cpu/makez80.zip),
@@ -158,6 +164,9 @@ complex memory-access code for the memory-mapped modes. On
 bankswitching instructions, we switch between the two copies if
 necessary.
 
+Version 0.8 added a GTK+ frontend (gmz800em).  I took the code from
+Russell's nc100em-1.2 and modified it to work with mz800em. 
+
 
 Using mz800em
 -------------
@@ -165,11 +174,13 @@ Using mz800em
 There's no man page due to this being a really quick hack, so this'll
 have to do. Sorry. :-)
 
-In GNU/Linux, mz800em uses SVGALIB, that is, you must run it on the
-console.  In Windows-32, mz800em runs in a window.
+In GNU/Linux, there are two binaries: `mz800em' uses SVGALIB, that is,
+it runs on the console, provided that SVGALIB supports your graphics
+card.  `gmz800em' runs in a window on X.  In Windows-32, mz800em runs
+in a window.
 
-You can quit with F10. In GNU/Linux, virtual console switching works
-as usual with Alt-Fn.
+You can quit with F10. In the SVGALIB front-end, virtual console
+switching works as usual with Alt-Fn.
 
 The emulated MZ800 attempts to run at 3.546MHz; the speed is
 timer-controlled. You can switch the speed control off by typing
@@ -344,9 +355,9 @@ the following features will be enabled:
 
   - Proper keyboard support.  The MZ-ish way of reading the keyboard
     is replaced by a new method. This will give you better keyboard
-    response and a normal keyboard layout (assuming German layout I'm
-    afraid, but you can change this with a little work in
-    `mzterm.c'; if you did, please send me a patch). 
+    response and a normal keyboard layout (with German layout for the
+    svgalib and Windows front-ends, but you can change this with a
+    little work in `pckey.c'; if you did, please send me a patch). 
 
   - Printer support.  The printer output is appended to a file
     `~printer~' in the current working directory. The current LPT mode

@@ -78,7 +78,8 @@ void graphics_write(int addr, int value)
   int x, y;
   unsigned char *pptr, *buffer;
 
-  pptr = buffer = writeptr + ((addr - 0x8000) & 0x1fff) * 8;
+  pptr = buffer = writeptr + ((addr - 0x8000)
+			      & (mzbpl==40 ? 0x1fff : 0x3fff)) * 8;
 
   switch (WF >> 5) {
   case 0: /* Single write -- write to addressed planes */
@@ -114,7 +115,8 @@ void graphics_write(int addr, int value)
   if (!directvideo && !writeplaneb) {
     x = ((addr - 0x8000) % mzbpl) * 8; 
     y = (addr - 0x8000) / mzbpl;
-    req_graphics_update(buffer, x, y, 8);
+    if (y < 200) 
+      req_graphics_update(buffer, x, y, 8);
   }
 
 }
@@ -122,7 +124,8 @@ void graphics_write(int addr, int value)
 int graphics_read(int addr)
 {
   int i;
-  unsigned char *pptr = readptr + ((addr - 0x8000) & 0x1fff) * 8;
+  unsigned char *pptr = readptr + ((addr - 0x8000)
+				   & (mzbpl==40 ? 0x1fff : 0x3fff)) * 8;
   int result = 0;
 
   switch (RF >> 7) {

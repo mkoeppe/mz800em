@@ -1,9 +1,6 @@
 The current option handling should be replaced with a proper one,
 using getopt.
 
-After finishing Windows-32 support, the source structure should be
-cleaned up. There are too many hacks at the moment.
-
 When using `mz80' instead of the native Z80 kernel, a lot of things
 fail. 
 

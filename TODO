@@ -17,16 +17,12 @@ removed conditionally if we decide to include "z80ops.c" two (or
 three) times; one copy with ixoriy #define'd 0, and one copy which
 becomes active when an dd/fd prefix occurs.
 
-Support the X Window system, maybe using some code from Russell Marks'
-Z81 (metalab.unc.edu/pub/Linux/system/emulators/zx/z81-1.2.tar.gz) or
-nc100em. 
-
-Make a version running in DOS (using DJGPP and the svgalib port to
-DJGPP). 
-
 Cygwin: Add proper timing. Fix palette problem. Let the process pause
 if window is not active, or if it is waiting for mzterm-ish keyboard
 input. 
+
+GTK+: Improve the GTK+ display code.  Add support for the border color
+(BCOL). 
 
 Add support for the SHARP MZ-900 series, a Z80 machine running at
 12MHz, compatible with the MZ-800 series, but featuring 2 pages of

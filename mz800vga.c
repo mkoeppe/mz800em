@@ -157,9 +157,9 @@ void maybe_update_graphics()
 
 #  else
 
-void req_graphics_update(void *b, int x, int y, int pixels)
+void req_graphics_update(unsigned char *b, int x, int y, int pixels)
 {
-  vga_drawscansegment(v, x, y, pixels);
+  vga_drawscansegment(b, x, y, pixels);
 }
 
 void do_update_graphics()
