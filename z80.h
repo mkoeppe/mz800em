@@ -1,5 +1,5 @@
 /* Miscellaneous definitions for xz80, copyright (C) 1994 Ian Collier.
- * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@mail.math.uni-magdeburg.de>
+ * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,6 @@
 #define Z80_save  5
 #define Z80_log   6
 
-#ifdef COPY_BANKSWITCH
-extern unsigned char *visiblemem;
-#endif
 extern unsigned char *memptr[];
 extern int memattr[];
 extern int mmio_in(int addr);
@@ -37,70 +34,37 @@ extern volatile int interrupted;
 extern volatile int intvec;
 extern int forceok;
 
-extern int loader(int);
-extern void diskloader(void *);
+extern int loader();
+extern int diskloader(void *);
 extern int cmthandler(int address, int length, int what);
 extern int basicfloppyhandler(int address, int length, 
 			      int sector, int drive, int write);
 extern int basicfloppyhandler2(int tableaddress);
-extern int mztermservice(int channel, int width, int a, int sp);
+extern int mztermservice(int channel, int width);
 extern unsigned int in(int h, int l);
 extern unsigned int out(int h, int l, int a);
-extern void do_interrupt();
-extern void mainloop(unsigned short initial_pc, unsigned short initial_sp);
-extern void fix_tstates();
+extern int do_interrupt();
+extern int mainloop(unsigned short initial_pc, unsigned short initial_sp);
+extern int fix_tstates();
 extern void pending_interrupts_hack();
-extern void reset();
 
-#ifdef COPY_BANKSWITCH
-
-/* load respects mmio */
-#  define load(x) ((memattr[(unsigned short)(x)>>12]&2)?mmio_in(x):visiblemem[x])
-#  ifdef SLOPPY_2
-#    define load2(x) ((memattr[(unsigned short)(x)>>12]&2)?\
-		      ((mmio_in((x)+1)<<8)|mmio_in(x)) :\
-		      *((unsigned short *)(visiblemem+(x))))
-#  else
-#    define load2(x) ((load((x)+1)<<8)|load(x))
-#  endif
-/* fetch ignores mmio */
-#  define fetch(x) (visiblemem[x])
-#  define fetch2(x) (*((unsigned short *)(visiblemem+(x))))
-/* store respects mmio */
-#  define store(x,y) ((memattr[(unsigned short)(x)>>12]&2)?mmio_out(x,y):\
-		      ((memattr[(unsigned short)(x)>>12])?(void)(visiblemem[x]=(y)):(void)0))
-#  ifdef SLOPPY_2
-#    define store2(x,y) ((memattr[(unsigned short)(x)>>12]&2)\
-			 ?(mmio_out(x,(y)&255), mmio_out((x)+1,(y)>>8))\
-			 :((memattr[(unsigned short)(x)>>12])\
-			   ?(*((unsigned short *)(visiblemem+x))=y):(void)0))
-#    define store2b(x,hi,lo) store2(x, ((hi)<<8) | (lo))
-#  else
-#    define store2b(x,hi,lo) (store(x,lo), store((x)+1, hi))
-#    define store2(x,y) store2b(x,(y)>>8,(y)&255)
-#  endif
-#define mempointer(x) (visiblemem+(x))
-
-#else /* no COPY_BANKSWITCH */
-
-/* both load and fetch respect mmio */
-#  ifdef HEAVY_LOAD
-#    define load(x) ((memattr[(unsigned short)(x)>>12]&2)?mmio_in(x):\
-		   memptr[(unsigned short)(x)>>12][(x)&4095])
-#  else
-     /* this is suboptimal but makes compiling realistic on a 16Mb machine
-      * with `gcc -O'. (which otherwise thrashes to hell and back) */
-static int load(int x)
+/* bleah :-( */
+#ifdef linux
+#define fetch(x) ((memattr[(unsigned short)(x)>>12]&2)?mmio_in(x):\
+			memptr[(unsigned short)(x)>>12][(x)&4095])
+#else
+/* this is suboptimal but makes compiling realistic on a 16Mb machine
+ * with `gcc -O'. (which otherwise thrashes to hell and back)
+ */
+static int fetch(int x)
+     /*int x;*/
 {
-  int page=(unsigned short)(x)>>12;
-  return((memattr[page]&2)?mmio_in(x):memptr[page][(x)&4095]);
+int page=(unsigned short)(x)>>12;
+return((memattr[page]&2)?mmio_in(x):memptr[page][(x)&4095]);
 }
-#  endif
-#  define load2(x) ((load((x)+1)<<8)|load(x))
-#  define fetch(x) load(x)
-#  define fetch2(x) load2(x)
+#endif
 
-#  define mempointer(x) (memptr[(unsigned short)(x)>>12] + ((x)&4095))
+#define fetch2(x) ((fetch((x)+1)<<8)|fetch(x))
 
 #define store(x,y) do {\
           unsigned short off=(x)&4095;\
@@ -147,5 +111,6 @@ static void inline store2func(unsigned short ad,unsigned char b1,unsigned char b
 #define store2b(x,hi,lo) store2func(x,hi,lo)
 #endif
 
-#endif /* no COPY_BANKSWITCH */
-
+#define bc ((b<<8)|c)
+#define de ((d<<8)|e)
+#define hl ((h<<8)|l)
