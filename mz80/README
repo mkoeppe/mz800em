@@ -9,4 +9,4 @@ form in accordance with its licensing conditions.
 
 This directory also contains a patch `makez80.c.dif', which is
 required to make `mz80' work with `mz800em', and a `Makefile'. Both
-are copr. Matthias K"oppe (mkoeppe@cs.uni-magdeburg.de).
+are copr. Matthias K"oppe (mkoeppe@mail.math.uni-magdeburg.de).

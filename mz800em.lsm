@@ -28,7 +28,7 @@ Author:         imc@comlab.ox.ac.uk (Ian Collier)
 Maintained-by:  mkoeppe@mail.math.uni-magdeburg.de (Matthias Koeppe)
 Primary-site:   metalab.unc.edu /pub/Linux/system/emulators
 		mz800em-0.7.2.tar.gz
-Alternate-site: http://www.cs.uni-magdeburg.de/~mkoeppe/mz800/mz800.html
+Alternate-site: http://www.math.uni-magdeburg.de/~mkoeppe/mz800/mz800.html
 Platforms:      Linux with svgalib, Windows-32 with cygwin
 Copying-policy: GPL.  Includes MZ80 by Neil Bradley, which is non-GPL,
 		restricted to non-commercial use and requires unmodified
