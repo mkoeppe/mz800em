@@ -1,5 +1,6 @@
 /* Emulation of the Z80 CPU with hooks into the other parts of mz700em.
  * Copyright (C) 1994 Ian Collier. mz700em changes (C) 1996 Russell Marks.
+ * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +42,7 @@ unsigned char partable[256]={
 
 
 
-mainloop()
+mainloop(unsigned short initial_pc, unsigned short initial_sp)
 {
 unsigned char a, f, b, c, d, e, h, l;
 unsigned char r, a1, f1, b1, c1, d1, e1, h1, l1, i, iff1, iff2, im;
@@ -57,6 +58,8 @@ int count;
 a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
 ixoriy=new_ixoriy=0;
 ix=iy=sp=pc=0;
+pc = initial_pc;
+sp = initial_sp;
 tstates=radjust=0;
 while(1)
   {
@@ -80,7 +83,7 @@ while(1)
     {
     tstates=0;
     
-    if(interrupted==1)
+    if(interrupted==1 || interrupted==4)
       do_interrupt();	/* does the screen update & keyboard reading */
     
     if(interrupted==2)
@@ -103,18 +106,17 @@ while(1)
       continue;
       }
     
-    interrupted=0;
-    
     /* the int itself is only used once every 12 hours (!) so
      * don't bother with it for now, at least.
      */
     
-#if 0
-    if(iff1) {
-      if(fetch(pc)==0x76)pc++;
-      iff1=iff2=0;
-      tstates+=5; /* accompanied by an input from the data bus */
-      switch(im){
+#if 1
+    if (interrupted >= 4) {
+      if(iff1) {
+	if(fetch(pc)==0x76)pc++;
+	iff1=iff2=0;
+	tstates+=5; /* accompanied by an input from the data bus */
+	switch(im){
         case 0: /* IM 0 */
         case 1: /* undocumented */
         case 2: /* IM 1 */
@@ -126,13 +128,18 @@ while(1)
         case 3: /* IM 2 */
           tstates+=13; /* perhaps */
           {
-          int addr=fetch2((i<<8)|0xff);
-          push2(pc);
-          pc=addr;
+	    int addr=fetch2((i<<8)| intvec ); 
+	    intvec = 0xfe; /* MK: was 0xff */
+	    push2(pc);
+	    pc=addr;
           }
         }
       }
+    }
 #endif
+    interrupted=0;
+  
+
     }
   }
 }
