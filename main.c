@@ -28,26 +28,23 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <vga.h>
-#include <vgakeyboard.h>
-#if defined(USE_RAWKEY)
-#  include <rawkey.h>
-#endif
 #include <time.h>
 #ifdef linux
+#  define unixish
+#  include <vga.h>
+#  include <vgakeyboard.h>
+#  if defined(USE_RAWKEY)
+#    include <rawkey.h>
+#  endif
 #  include <sys/stat.h>
 #  include <sys/soundcard.h>
 #  include <asm/io.h>  /* for LPT hack */
-#else
-#  define __DJGPP__
-/* FIXME */
 #endif
-#ifdef __DJGPP__
-#  include <sys/stat.h>
-#  include "scancode.h"
-#  define SA_RESTART 0
-#  define SA_ONESHOT 0
+#ifdef __CYGWIN__
+#  define unixish
+#  include "mz800win.h"
 #endif
+
 #include "z80.h"
 #include "mz700em.h"
 #include "graphics.h"
@@ -78,7 +75,7 @@ unsigned char *memptr[16]=
 unsigned char *visiblemem = mem + RAM_START;
 #endif
 
-/* first 4k and last 4k is ROM, but the rest is writeable */
+/* first 4k and last 8k is ROM, but the rest is writeable */
 /* 2 means it's memory-mapped I/O. The first bytes at E000 are memory-mapped I/O;
    the rest is ROM */
 int memattr[16]={1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1};
@@ -266,15 +263,20 @@ void dontpanic(a)
   }
 #endif
   fclose(cmtfile);
-#if defined(USE_RAWKEY)
-  rawmode_exit();
+#if defined(__CYGWIN__)
+  close_windows();
 #else
+#  if defined(USE_RAWKEY)
+  rawmode_exit();
+#  else
   keyboard_close();
-#endif
+#  endif
   vga_setmode(TEXT);
+#endif
   exit(1);
 }
 
+#if !defined(__CYGWIN__)
 void screenon()
 {
   vga_setmode(G320x200x256);
@@ -287,10 +289,12 @@ void screenoff()
 {
   vga_setmode(TEXT);
 }
+#endif
 
 void dummy()
 {}
 
+#if defined(ALLOW_LPT_ACCESS)
 void outportb(int port, char a)
 {
   /* direct output to /dev/port */
@@ -309,7 +313,9 @@ char inportb(int port)
   return a; */
   return inb(port);
 }
+#endif
 
+#ifdef REAL_TIMER
 void set8253timer()
 {
   struct itimerval itv;
@@ -321,8 +327,13 @@ void set8253timer()
 						     2500) / 39) % 1000000;*/
   setitimer(ITIMER_REAL,&itv,NULL);
 }
+#endif
 
+#if defined(__CYGWIN__)
+int semi_main(argc, argv)
+#else
 int main(argc,argv)
+#endif
      int argc;
      char **argv;
 {
@@ -357,9 +368,6 @@ int main(argc,argv)
     argv+=1, argc-=1;
   }
 #endif
-
-  init_scroll();
-  vga_init();
 
   loadrom(mem);
   /* adjust ROM entry point */
@@ -417,34 +425,40 @@ int main(argc,argv)
 #endif
     }
 
-  screenon();
+  init_scroll();
+  out(0, 0xce, 8); /* set mz700 mode */
+  
+#if !defined(__CYGWIN__)
   vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
+  vga_init();
+  screenon();
   update_palette();
-
-#if defined(USE_RAWKEY)
+#  if defined(USE_RAWKEY)
   rawmode_init();
   set_switch_functions(screenoff,screenon);
   allow_switch(1);
   for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
-#else
+#  else
   keyboard_init();
   keyboard_seteventhandler(key_handler);
   keyboard_translatekeys(DONT_CATCH_CTRLC);
+#  endif
 #endif
-
+  
   if(argc>=2 && strcmp(argv[1],"-c")==0) { /* "copy rom to ram" */ 
     memcpy(mem + RAM_START, mem + ROM_START, 4096);
     out(0, 0xe0, 0);
     argv++, argc--;
   }
 
+#ifdef REAL_TIMER
   /* Real Timer control */
-
   if(argc>=2 && strcmp(argv[1],"-r")==0) { /* "real-time" */
     RealTimer = 1;
     argv++, argc--;
   }
-
+#endif
+  
 #ifdef linux
   sa.sa_handler=dontpanic;
   sa.sa_mask=0;
@@ -460,15 +474,20 @@ int main(argc,argv)
 
   /* timer for speed control, screen update, etc */
 
-#ifdef __DJGPP__
+#if defined(__DJGPP__)
   sa.sa_handler=sighandler;
   memset(&sa.sa_mask, 0, sizeof(sa.sa_mask));
   sa.sa_flags=0;
-#endif
-#ifdef linux
+#elif defined(linux)
   sa.sa_handler=sighandler;
   sa.sa_mask=0;
   sa.sa_flags=SA_RESTART;
+#elif defined(__CYGWIN__)
+  sa.sa_handler=sighandler;
+  sa.sa_mask=0;
+  sa.sa_flags=0;
+#else
+#  error "Sorry, not supported."
 #endif
   if (!RealTimer)
     sigaction(SIGALRM,&sa,NULL);
@@ -481,25 +500,29 @@ int main(argc,argv)
 
   /* timer for 8253 emulation */
 
-#ifdef linux
+#ifdef REAL_TIMER
+#  ifdef linux
   if (RealTimer) {
     sa.sa_handler=sig8253handler;
     sa.sa_mask=0;
     sa.sa_flags=SA_RESTART;
     sigaction(SIGALRM,&sa,NULL);
   }
+#  endif
 #endif
-
+  
   cont1 = 0x3cfb; /* the cont1 is driven at 15.6 kHz */
   cont2 = 0xa8c0; /* seconds in 12 hours */
 
-#ifdef linux
+#ifdef REAL_TIMER
+#  ifdef linux
   if (RealTimer) {
     cont1 = 10; cont2 = 1; /* FIXME */ 
     set8253timer();
   }
+#  endif
 #endif
-
+  
   /* Switch to boot memory configuration */
 
   out(0, 0xe4, 0);
@@ -574,18 +597,23 @@ int main(argc,argv)
 
   /* shouldn't get here, but... */
   if(audio_fd!=-1) close(audio_fd);
-#if defined(USE_RAWKEY)
+#if !defined(__CYGWIN__)
+#  if defined(USE_RAWKEY)
   rawmode_exit();
-#endif
+#  endif
   vga_setmode(TEXT);
+#endif
   exit(0);
 }
 
 #ifdef linux
-#define libpath "/usr/local/lib"
+#  define libpath "/usr/local/lib"
+#endif
+#ifdef __CYGWIN__
+#  define libpath "."
 #endif
 #ifdef __DJGPP__
-#define libpath "."
+#  define libpath "."
 #endif
 
 loadrom()
@@ -1123,9 +1151,10 @@ void mmio_out(addr,val)
       else
 	cont1=((cont1&0xff00)|val);
       e007hi^=1;
-      
+#ifdef REAL_TIMER
       if (!e007hi && RealTimer) set8253timer();
-
+#endif
+      
       break;
 
     case 0xE006: /* cont2 - this takes the countdown timer */
@@ -1135,7 +1164,9 @@ void mmio_out(addr,val)
 	cont2=((cont2&0xff00)|val);
       e007hi^=1;
       timesec = cont2;
+#ifdef REAL_TIMER
       if (!e007hi && RealTimer) set8253timer();
+#endif
       break;
 
     case 0xE007:
@@ -1216,35 +1247,53 @@ update_scrn()
 	|| pcgptr[8*y+7]!=pcgram_old[8*y+7];
     }
 
-    for(y=0;y<25;y++)
-      {
-	for(x=0;x<40;x++,ptr++,oldptr++)
+#if defined(__CYGWIN__)
+    begin_draw();
+#endif
+    for(y=0;y<25;y++) {
+      int minx = 40, maxx = 0;
+      for(x=0;x<40;x++,ptr++,oldptr++) {
+	c=*ptr;
+	if(*oldptr!=c 
+	   || oldptr[2048]!=ptr[2048] 
+	   || pcgchange[(ptr[2048]&128 ? 256 : 0) + c]
+	   || refresh_screen)
 	  {
-	    c=*ptr;
-	    if(*oldptr!=c 
-	       || oldptr[2048]!=ptr[2048] 
-	       || pcgchange[(ptr[2048]&128 ? 256 : 0) + c]
-	       || refresh_screen)
+	    if (x < minx) minx = x;
+	    if (x >= maxx) maxx = x + 1;
+	    fg=mz7colors[(ptr[2048]>>4)&7];
+	    bg=mz7colors[ ptr[2048]    &7];
+	    
+	    for(b=0;b<8;b++)
 	      {
-		fg=mz7colors[(ptr[2048]>>4)&7];
-		bg=mz7colors[ ptr[2048]    &7];
-      
-		for(b=0;b<8;b++)
-		  {
-		    tmp=vptr+(y*8+b)*320+x*8;
-		    d=(mem+PCGRAM_START+(ptr[2048]&128 ? 2048 : 0))[c*8+b];
-		    mask=1;
-		    for(a=0;a<8;a++,mask<<=1)
-		      *tmp++=(d&mask)?fg:bg;
-		  }
+		tmp=(directvideo ? vptr : vbuffer)+(y*8+b)*320+x*8;
+		d=(mem+PCGRAM_START+(ptr[2048]&128 ? 2048 : 0))[c*8+b];
+		mask=1;
+		for(a=0;a<8;a++,mask<<=1)
+		  *tmp++=(d&mask)?fg:bg;
 	      }
 	  }
       }
-
+      if (!directvideo && minx < 40) {
+	for (b=0; b<8; b++) 
+	  vga_drawscansegment(vbuffer + (y*8+b)*320+minx*8,
+			      minx * 8, y * 8 + b, 8 * (maxx-minx));
+      }
+    }
+#if defined(__CYGWIN__)
+    end_draw();
+#endif
     /* now, copy new to old for next time */
     memcpy(vidmem_old, videoptr, 4096);
     memcpy(pcgram_old, pcgptr, 4096);
   }
+#if defined(__CYGWIN__)
+  /* In Cygwin, updating at each graphics write is too expensive. So
+     we do the actual update here. */
+  else { /* MZ800 mode */
+    win_update_graphics();
+  }
+#endif
   refresh_screen=0;
 }
 
@@ -1254,25 +1303,37 @@ void toggle_blackwhite()
   update_palette();
 }
 
-#if defined(USE_RAWKEY)
+#if defined(__CYGWIN__)
+#  define is_key_pressed(k) GetAsyncKeyState(k)
+#  define scan_keyboard() (void)0
+#  define keyboard_update() (void)0
 #else
-# define is_key_pressed(k) key_state[k]
-# define scan_keyboard keyboard_update
-
+#  if defined(USE_RAWKEY)
+#  else
+#   define is_key_pressed(k) key_state[k]
+#   define scan_keyboard keyboard_update
 void key_handler(int scancode, int press)
 {
   if ((end+1) % CODERINGSIZE != front) {
-    codering[end] = press ? scancode : (scancode|0x80);
+    codering[end] = press ? scancode : (scancode|0x8000);
     if (press) coderingdowncount++;
     end = (end+1) % CODERINGSIZE;
   }
   key_state[scancode&127] = press;
 }
+#  endif
 #endif
 
 update_kybd()
 {
   int y;
+
+  for(y=0;y<10;y++) keyports[y]=0;
+
+#if defined(__CYGWIN__)
+  /* FIXME */
+  /*   if (GetActiveWindow() != window_handle) return; */
+#endif
 
 #if defined(USE_RAWKEY)
   for(y=0;y<5;y++) scan_keyboard();
@@ -1297,8 +1358,6 @@ update_kybd()
       while(is_key_pressed(SCANCODE_F12)) { usleep(20000); scan_keyboard(); };
       toggle_blackwhite(); 
     }
-
-  for(y=0;y<10;y++) keyports[y]=0;
 
   /* this is a bit messy, but librawkey isn't too good at this sort
    * of thing - it wasn't really intended to be used like this :-)
@@ -1408,7 +1467,11 @@ fix_tstates()
   if(do_sound)
     playsound();
   else
+#if defined(__CYGWIN__)
+    handle_messages(); /* FIXME */
+#else
     pause();
+#endif
 }
 
 
@@ -1416,6 +1479,9 @@ do_interrupt()
 {
   update_scrn();
   update_kybd();
+#if defined(__CYGWIN__)
+  handle_messages();
+#endif
   if(interrupted<2) interrupted=0;
 }
 
@@ -1582,21 +1648,3 @@ playsound()
   /* this runs instead of alarm int, so... */
   if(interrupted<2) interrupted=1;
 }
-
-/*void init_ramdisk()
-{
-  const char header[16] = {0xff, 0xff, 0x10, 0, 0, 0, 0, 0, 8, 9, 10, 11, 12, 13, 14, 15};
-  memset(mem+RAMDISK_START, 0, 64*1024);
-  memcpy(mem+RAMDISK_START, header, 16);
-}
-
-struct ramdisk_entry {
-  unsigned short offset_to_next;
-  unsigned short magic1;
-  unsigned short type;
-  char name[
-
-};
-
-void to_ramdisk(FILE *file, char type, */
-

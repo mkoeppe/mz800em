@@ -19,7 +19,12 @@
  */
 
 #include <stdlib.h>
-#include <vga.h>
+#ifdef linux
+#  include <vga.h>
+#endif
+#ifdef __CYGWIN__
+#  include <windows.h>
+#endif
 #include "graphics.h"
 
 int mz800mode=0;
@@ -44,6 +49,31 @@ int palette[4];
 int palette_block;
 int blackwhite = 0;
 
+#if defined(__CYGWIN__)
+
+void update_DMD(int a)
+{
+  vptr = 0;
+  directvideo = 0;
+  if ((DMD & 4) != (a & 4)) {
+    /* switch between 320 and 640 mode */
+    if (a&4) { /* switch to 640 mode */
+      mzbpl = 80;
+    }
+    else { /* switch to 320 mode */
+      mzbpl = 40;
+    }
+    update_palette();
+  }
+  DMD = a & 7;
+  update_RF(RF);
+  update_WF(WF);
+}
+
+/* update_palette implemented in `mz800win.c'. */
+
+#else
+
 void update_DMD(int a)
 {
   if ((DMD & 4) != (a & 4)) {
@@ -66,6 +96,26 @@ void update_DMD(int a)
   update_RF(RF);
   update_WF(WF);
 }
+
+void update_palette()
+{
+  int i;
+  int color;
+  int *colors = blackwhite ? mzgrays : mzcolors;
+  for (i = 0; i < 16; i++) {
+    if (mz800mode) {
+      if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
+      else color = colors[i];
+    }
+    else color = colors[i];
+    vga_setpalette(i,
+		   (color >> 8) & 63, (color >> 16) & 63, color & 63);
+  }
+}
+
+#endif
+
+/* common code */
 
 static unsigned char writecolorplanes;
 static unsigned char resetcolorplanes;
@@ -259,6 +309,7 @@ void do_scroll(int start, int end, int delta)
       /* release buffer */
       free(buf);
 
+      
       if (!directvideo) { /* copy scrolled region back to screen */
 	int y;
 	for (y = start * _320 / 5 / mzbpl; 
@@ -292,21 +343,5 @@ void init_scroll()
   SEA = OSEA = 0x7d;
   SSA = OSSA = 0;
   BCOL = OBCOL = 0;
-}
-
-void update_palette()
-{
-  int i;
-  int color;
-  int *colors = blackwhite ? mzgrays : mzcolors;
-  for (i = 0; i < 16; i++) {
-    if (mz800mode) {
-      if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
-      else color = colors[i];
-    }
-    else color = colors[i];
-    vga_setpalette(i,
-		   (color >> 8) & 63, (color >> 16) & 63, color & 63);
-  }
 }
 

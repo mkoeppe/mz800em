@@ -20,7 +20,15 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <glob.h>
+#if defined(__CYGWIN__)
+/* dont have glob */
+#  define NO_GLOB
+#endif
+#if defined(NO_GLOB)
+#  include <dirent.h>
+#else
+#  include <glob.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -64,7 +72,12 @@ static unsigned char Small[26] = {
 static void MakeDirectory(char *path)
 {
   int i;
+#if defined(NO_GLOB)
+  DIR *dir;
+  struct dirent *dirent;
+#else
   glob_t g;
+#endif
   char buf[1024];
   struct stat sb;
 
@@ -73,38 +86,54 @@ static void MakeDirectory(char *path)
   MzDirectory[0].name[0] = 0x01;
 
   strcpy(buf, path);
+#if defined(NO_GLOB)
+  dir = opendir(buf);
+  i = 0;
+  while (dirent = readdir(dir)) {
+    char *pathv = dirent->d_name;
+    if (strlen(pathv) > 4 
+	&& stricmp(pathv + strlen(pathv) - 4, ".btx")==0) {
+#else /* with glob */
   strcat(buf, "/" "*.btx");
   glob(buf, GLOB_ERR, NULL, &g);
   for (i = 0; i < 63 && i < g.gl_pathc; i++) {
-    char *n, *e;
-    int j;
+    char *pathv = g.gl_pathv[i];
+#endif
+      char *n, *e;
+      int j;
 
-    MzDirectory[i+1].ftype = 2;
-    memset(&MzDirectory[i+1].name, ' ', 17);
-    n = strrchr(g.gl_pathv[i], '/');
-    if (n) n++; else n = g.gl_pathv[i];
-    e = strrchr(n, '.');
-    if (!e) e = n + strlen(n);
-    if (*n == '_') { /* MzTerm's all-capital name coding */
-      for (j = 0, n++; n!=e && j<16; n++, j++)
-	MzDirectory[i+1].name[j] = toupper(*n);
-      MzDirectory[i+1].mangleflag = 1; /* remember this case */
-      MzDirectory[i+1].name[j] = 0x0d;
+      MzDirectory[i+1].ftype = 2;
+      memset(&MzDirectory[i+1].name, ' ', 17);
+      n = strrchr(pathv, '/');
+      if (n) n++; else n = pathv;
+      e = strrchr(n, '.');
+      if (!e) e = n + strlen(n);
+      if (*n == '_') { /* MzTerm's all-capital name coding */
+	for (j = 0, n++; n!=e && j<16; n++, j++)
+	  MzDirectory[i+1].name[j] = toupper(*n);
+	MzDirectory[i+1].mangleflag = 1; /* remember this case */
+	MzDirectory[i+1].name[j] = 0x0d;
+      }
+      else {
+	for (j = 0; n!=e && j<16; n++, j++)
+	  MzDirectory[i+1].name[j] 
+	    = islower(*n) ? Small[*n - 'a'] : *n;
+	MzDirectory[i+1].mangleflag = 2; /* remember this case */
+	MzDirectory[i+1].name[j] = 0x0d;
+      }
+      stat(pathv, &sb);
+      MzDirectory[i+1].len = sb.st_size;
+      MzDirectory[i+1].lock = !(sb.st_mode & S_IWUSR);
+      MzDirectory[i+1].sector = FirstSector + i+1;
+#if defined(NO_GLOB)
+      i++;
     }
-    else {
-      for (j = 0; n!=e && j<16; n++, j++)
-	MzDirectory[i+1].name[j] 
-	  = islower(*n) ? Small[*n - 'a'] : *n;
-      MzDirectory[i+1].mangleflag = 2; /* remember this case */
-      MzDirectory[i+1].name[j] = 0x0d;
-    }
-    stat(g.gl_pathv[i], &sb);
-    MzDirectory[i+1].len = sb.st_size;
-    MzDirectory[i+1].lock = !(sb.st_mode & S_IWUSR);
-    MzDirectory[i+1].sector = FirstSector + i+1;
+  }
+  closedir(dir);
+#else /* with glob */
   }
   globfree(&g);
-
+#endif
   MzSectorTable.volume = 0x57;
   MzSectorTable.offset = 0x18;
   MzSectorTable.maxsector = 0x500;
@@ -189,7 +218,15 @@ static void DirectoryChange(char *dir, DirEntry *nw, DirEntry *old)
     strcat(b, RealName(buf, nw));
     strcat(b, ".btx");
     rename(a, b);
+#if defined(__CYGWIN__)
+    { /* dont have truncate */
+      FILE *ff = fopen(b, "rwb");
+      ftruncate(ff->_file, nw->len);
+      fclose(ff);
+    }
+#else
     truncate(b, nw->len);
+#endif
     break;
   case 0x0002: /* Delete File */
     strcpy(a, dir);

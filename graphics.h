@@ -19,6 +19,8 @@
  */
 
 extern int mz800mode;
+extern int directvideo;
+extern int mzbpl;
 extern int DMD;
 extern int SCROLL[8];
 extern unsigned char *vptr; /* real screen buffer */
@@ -28,6 +30,7 @@ extern unsigned char *vbuffer; /* virtual screen buffer */
 extern int palette[4];
 extern int palette_block;
 extern int blackwhite;
+extern int mzcolors[16], mzgrays[16];
 
 extern void update_WF(int a);
 extern void update_RF(int a);

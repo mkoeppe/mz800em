@@ -23,7 +23,6 @@
 #endif
 #ifdef __CYGWIN__
 #  include "mz800win.h"
-#  include "scancode.h"
 #  include <sys/time.h>
 #endif
 
@@ -88,9 +87,12 @@ int getmzkey()
   if (!(c&0x8000)) coderingdowncount--;
 
 #if defined(__CYGWIN__)
+  rightshift = GetAsyncKeyState(SCANCODE_RIGHTSHIFT);
   shift = GetAsyncKeyState(SCANCODE_LEFTSHIFT) || GetAsyncKeyState(SCANCODE_RIGHTSHIFT);
   ctrl = GetAsyncKeyState(SCANCODE_RIGHTCONTROL) || GetAsyncKeyState(SCANCODE_LEFTCONTROL);
   alt = GetAsyncKeyState(SCANCODE_RIGHTALT) || GetAsyncKeyState(SCANCODE_LEFTALT);
+  /* NOTE: This is not just a hack but a really disgusting one */
+#  include "scancode.h"
 #else
   switch (c & 0x7fff) {
   case SCANCODE_RIGHTCONTROL:
@@ -161,9 +163,7 @@ int getmzkey()
   case SCANCODE_BRACKET_RIGHT: return A('+', '*', 0x94);
 
     case SCANCODE_KEYPADENTER:
-#if SCANCODE_KEYPADENTER!=SCANCODE_ENTER
     case SCANCODE_ENTER:
-#endif
     return 0x0d;
 
   case SCANCODE_LEFTCONTROL: return 0;
@@ -176,8 +176,8 @@ int getmzkey()
   case SCANCODE_J:	return CL('J', 0xaf);
   case SCANCODE_K:	return CL('K', 0xa9);
   case SCANCODE_L:	return CL('L', 0xb8);
-  case SCANCODE_SEMICOLON: return S(0xa8, 0xba);
-  case SCANCODE_APOSTROPHE: return S(0xb9, 0xbb);
+  case SCANCODE_SEMICOLON: return L(0xa8, 0xba);
+  case SCANCODE_APOSTROPHE: return L(0xb9, 0xbb);
   case SCANCODE_GRAVE:	return S('^', 0x7b);
   case SCANCODE_BACKSLASH: return S('#', '\'');
   case SCANCODE_Z:	return CL('Y', 0xbd);
@@ -189,9 +189,7 @@ int getmzkey()
   case SCANCODE_M:	return CL('M', 0xb3);
   case SCANCODE_COMMA:	return S(',', ';');
   case SCANCODE_PERIOD: return S('.', ':');
-#if !defined(__CYGWIN__)
     case SCANCODE_SLASH:	return S('-', '_');
-#endif
     case SCANCODE_SPACE:	return ' ';
   case SCANCODE_CAPSLOCK: 
     capslock = !capslock;
@@ -263,10 +261,8 @@ int getmzkey()
   case SCANCODE_KEYPADMULTIPLY: return '*';
   case SCANCODE_KEYPADDIVIDE:	return '/';
   case SCANCODE_PRINTSCREEN:	return 0;
-  case SCANCODE_BREAK:
-#if SCANCODE_BREAK!=SCANCODE_BREAK_ALTERNATIVE
+    case SCANCODE_BREAK:
     case SCANCODE_BREAK_ALTERNATIVE:
-#endif
       return 0;
 
   }
