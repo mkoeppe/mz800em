@@ -10,6 +10,8 @@
 #define RAMDISK_START   (88*1024)       /* 64k RAM disk */
 #define MEM_END         (152*1024)      /* end of mem[] */
 
+extern unsigned char mem[];
+
 /* keyboard */
 #define CODERINGSIZE 16
 extern int codering[CODERINGSIZE];
@@ -18,4 +20,7 @@ extern int coderingdowncount;
 #if !defined(USE_RAWKEY)
 extern unsigned char key_state[128];
 #endif
+
 extern int batch;
+extern int refresh_screen;
+extern int retrace;

@@ -30,7 +30,7 @@
 #include <time.h>
 #ifdef linux
 #  define unixish
-#  include <linux/signal.h>
+#  include <signal.h>
 #  include <vga.h>
 #  include <vgakeyboard.h>
 #  if defined(USE_RAWKEY)
@@ -107,7 +107,7 @@ int Z80PIOIntEnabled[2];
 
 char **cmtlist;
 int cmtcount, cmtcur;
-FILE *cmtfile;
+FILE *cmtfile = 0;
 
 int e007hi=0;		/* whether to read hi or lo from e007-ish addrs */
 int retrace=1;		/* 1 when should say retrace is in effect */
@@ -141,8 +141,6 @@ int coderingdowncount = 0;
 void key_handler(int scancode, int press);
 #endif
 
-unsigned char vidmem_old[4096];
-unsigned char pcgram_old[4096];
 int refresh_screen=1;
 
 FILE *imagefile;
@@ -152,17 +150,13 @@ FILE *imagefile;
 int funny_lpt_loopback = 0;
 #endif
 
-FILE *printerfile;
+FILE *printerfile = 0;
 
 int batch = 0;
 char *batcharg;
 
 extern char VirtualDisks[4][1024];
 extern int VirtualDiskIsDir[4];
-
-/* MZ700 colors; these are references to the MZ800 colors
-   defined in graphics.c */
-int mz7colors[8]={0,9,10,11,12,13,14,15};
 
 int pending_timer_interrupts;
 int pending_vbln_interrupts;
@@ -277,7 +271,7 @@ void dontpanic(a)
     fclose(ramdisk);
   }
 #endif
-  fclose(cmtfile);
+  if (cmtfile) fclose(cmtfile);
   if (!batch) {
 #if defined(__CYGWIN__)
     close_windows();
@@ -489,7 +483,7 @@ int main(argc,argv)
   
 #ifdef linux
   sa.sa_handler=dontpanic;
-  sa.sa_mask=0;
+  __sigemptyset(&sa.sa_mask);
   sa.sa_flags=SA_ONESHOT;
 
   sigaction(SIGINT, &sa,NULL);
@@ -508,7 +502,7 @@ int main(argc,argv)
   sa.sa_flags=0;
 #elif defined(linux)
   sa.sa_handler=sighandler;
-  sa.sa_mask=0;
+  __sigemptyset(&sa.sa_mask);
   sa.sa_flags=SA_RESTART;
 #elif defined(__CYGWIN__)
   sa.sa_handler=sighandler;
@@ -624,7 +618,7 @@ int main(argc,argv)
     for (i = imagecnt; i<4 && argc > 1; i++, argc--, argv++) {
       strncpy(VirtualDisks[i], argv[1], 1024);
       stat(argv[1], &s);
-      VirtualDiskIsDir[i] = S_ISDIR(s.st_mode);
+      VirtualDiskIsDir[i] = !S_ISREG(s.st_mode);
     }
   }
 
@@ -700,7 +694,7 @@ loadrom()
     }
 }
 
-reset()
+void reset()
 {
   /* MZ700 mode */
   out(0, 0xce, 8);
@@ -710,9 +704,12 @@ reset()
   memcpy(mem+PCGRAM_START, mem+PCGROM_START, 4096);
   /* reprogram CRTC */
   init_scroll();
-  /* reset condition */
-  interrupted = 2;
 }
+
+/* bank-switch modes */
+#define BSM_PLAIN 0
+#define BSM_MMIO 1
+#define BSM_GRAPHICS 2
 
 #ifdef COPY_BANKSWITCH
 
@@ -730,10 +727,19 @@ void bankswitch(int block, unsigned char *address, int attr)
 }
 
 #  define BANKSWITCH(block, addr, attr) bankswitch(block, mem+(addr), attr)
-#  define BANKSWITCHALT(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
+
+#  ifdef USE_MZ80
+     extern void bankswitchmode(int mode);
+#    define BANKSWITCHMODE(mode) bankswitchmode(mode)
+#    define BANKSWITCHALT(block, addr, attr) (void)0
+#  else
+#    define BANKSWITCHMODE(mode) (void)0
+#    define BANKSWITCHALT(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
+#  endif
 #else
 #  define BANKSWITCH(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
 #  define BANKSWITCHALT BANKSWITCH
+#  define BANKSWITCHMODE(mode) (void)0
 #endif
 
 unsigned int in(h,l)
@@ -750,9 +756,10 @@ unsigned int in(h,l)
 
   switch(l) {
   case 0xe0:
-    /* make 1000-1fff PCG ROM and c000-cfff PCG RAM */
+    /* make 1000-1fff PCG ROM */
     BANKSWITCH(1, PCGROM_START, 0);
     if (mz800mode) {
+      BANKSWITCHMODE(BSM_GRAPHICS);
       /* make 8000-bfff VIDEO RAM */
       /* this is not actually video ram but memory mapped I/O */
       BANKSWITCHALT(8, VID_START, 2);
@@ -775,6 +782,7 @@ unsigned int in(h,l)
     /* make 1000-1fff and c000-cfff RAM */
     BANKSWITCH(1, RAM_START+0x1000, 1);
     if (mz800mode) {
+      BANKSWITCHMODE(BSM_PLAIN);
       /* make 8000-bfff RAM */
       BANKSWITCHALT(8, RAM_START + 0x8000, 1);
       BANKSWITCHALT(9, RAM_START + 0x9000, 1);
@@ -935,6 +943,7 @@ unsigned int out(h,l,a)
       if(!bs_inhibit)
 	{
 	  if (!mz800mode) {
+	    BANKSWITCHMODE(BSM_PLAIN);
 	    BANKSWITCH(13, RAM_START+0xD000, 1);
 	  }
 	  BANKSWITCH(14, RAM_START+0xE000, 1);
@@ -955,6 +964,7 @@ unsigned int out(h,l,a)
       if(!bs_inhibit)
 	{
 	  if (!mz800mode) {
+	    BANKSWITCHMODE(BSM_MMIO);
 	    BANKSWITCH(13, VID_START, 1);
 	  }
 	  BANKSWITCH(14, ROM800_START, 2);
@@ -964,6 +974,7 @@ unsigned int out(h,l,a)
   
     case 0xe4:
       if (mz800mode) {
+	BANKSWITCHMODE(BSM_GRAPHICS);
 	/* make 0000-0fff ROM */
 	BANKSWITCH(0, ROM_START, 0);
 	/* make 1000-1fff PCG ROM */
@@ -1248,118 +1259,6 @@ void mmio_out(addr,val)
     }
 }
 
-/* redraw the screen (MZ700 mode) */
-update_scrn()
-{
-  static int count=0;
-  unsigned char *pageptr;
-  int x,y,mask,a,b,c,d;
-  unsigned char *ptr,*videoptr,*oldptr,*pcgptr,*tmp,fg,bg;
-  char pcgchange[512];
-
-  retrace=1;
-
-#if 0
-  countsec++;
-
-  if (RealTimer) {
-    if(countsec>=50)
-    {
-      /* if e007hi is 1, we're in the middle of writing/reading the time,
-       * so put off the change till next 1/50th.
-       */
-      if(e007hi!=1)
-	{
-	  timesec--;
-	  if(timesec<=0) {
-	    interrupted = 4; /* cause timer interrupt */
-	    timesec=0xa8c0;	/* 12 hrs in secs */
-	  }
-	  countsec=0;
-	}
-    }
-  }
-#endif
-
-  if (!mz800mode) {
-
-    /* only do it every 1/Nth */
-    count++;
-    /*   if(count<scrn_freq) return(0); else count=0; */
-
-#ifdef COPY_BANKSWITCH
-    if (memptr[13] == mem+VID_START) videoptr = visiblemem+0xD000;
-    else videoptr = mem+VID_START;
-    if (memptr[12] == mem+PCGRAM_START) pcgptr = visiblemem+0xC000;
-    else pcgptr = mem+PCGRAM_START;
-#else
-    videoptr = mem+VID_START;
-    pcgptr = mem+PCGRAM_START;
-#endif
-    ptr = videoptr;
-    oldptr=vidmem_old;
-
-    for (y=0; y<512; y++) {
-      pcgchange[y] = pcgptr[8*y]!=pcgram_old[8*y]
-	|| pcgptr[8*y+1]!=pcgram_old[8*y+1]
-	|| pcgptr[8*y+2]!=pcgram_old[8*y+2]
-	|| pcgptr[8*y+3]!=pcgram_old[8*y+3]
-	|| pcgptr[8*y+4]!=pcgram_old[8*y+4]
-	|| pcgptr[8*y+5]!=pcgram_old[8*y+5]
-	|| pcgptr[8*y+6]!=pcgram_old[8*y+6]
-	|| pcgptr[8*y+7]!=pcgram_old[8*y+7];
-    }
-
-#if defined(__CYGWIN__)
-    begin_draw();
-#endif
-    for(y=0;y<25;y++) {
-      int minx = 40, maxx = 0;
-      for(x=0;x<40;x++,ptr++,oldptr++) {
-	c=*ptr;
-	if(*oldptr!=c 
-	   || oldptr[2048]!=ptr[2048] 
-	   || pcgchange[(ptr[2048]&128 ? 256 : 0) + c]
-	   || refresh_screen)
-	  {
-	    if (x < minx) minx = x;
-	    if (x >= maxx) maxx = x + 1;
-	    fg=mz7colors[(ptr[2048]>>4)&7];
-	    bg=mz7colors[ ptr[2048]    &7];
-	    
-	    for(b=0;b<8;b++)
-	      {
-		tmp=(directvideo ? vptr : vbuffer)+(y*8+b)*320+x*8;
-		d=(mem+PCGRAM_START+(ptr[2048]&128 ? 2048 : 0))[c*8+b];
-		mask=1;
-		for(a=0;a<8;a++,mask<<=1)
-		  *tmp++=(d&mask)?fg:bg;
-	      }
-	  }
-      }
-      if (!directvideo && minx < 40) {
-	for (b=0; b<8; b++) 
-	  vga_drawscansegment(vbuffer + (y*8+b)*320+minx*8,
-			      minx * 8, y * 8 + b, 8 * (maxx-minx));
-      }
-    }
-#if defined(__CYGWIN__)
-    end_draw();
-#endif
-    /* now, copy new to old for next time */
-    memcpy(vidmem_old, videoptr, 4096);
-    memcpy(pcgram_old, pcgptr, 4096);
-  }
-#if defined(__CYGWIN__)
-  /* In Cygwin, updating at each graphics write is too expensive. So
-     we do the actual update here. */
-  else { /* MZ800 mode */
-    win_update_graphics();
-  }
-#endif
-  refresh_screen=0;
-}
-
 void toggle_blackwhite()
 {
   blackwhite = !blackwhite;
@@ -1413,7 +1312,7 @@ update_kybd()
   if(is_key_pressed(SCANCODE_F11))
     {
       while(is_key_pressed(SCANCODE_F11)) { usleep(20000); scan_keyboard(); };
-      reset();	/* F11 = reset */
+      interrupted = 2;	/* F11 = reset */
     }
 
   if(is_key_pressed(SCANCODE_F12))

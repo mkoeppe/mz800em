@@ -21,10 +21,13 @@
 #include <stdlib.h>
 #ifdef linux
 #  include <vga.h>
+#  define REQ_GRAPHICS_UPDATE vga_drawscansegment
 #endif
 #ifdef __CYGWIN__
 #  include <windows.h>
+#  define REQ_GRAPHICS_UPDATE vga_drawscansegment
 #endif
+#include "z80.h"
 #include "mz700em.h"
 #include "graphics.h"
 
@@ -45,10 +48,15 @@ int mzgrays[16] = {0x000000, 0x040404, 0x080808, 0x0c0c0c,
 		   0x181818, 0x1c1c1c, 0x282828, 0x303030,
 		   0x101010, 0x141414, 0x202020, 0x242424,
 		   0x2c2c2c, 0x343434, 0x383838, 0x3c3c3c};
+/* MZ700 colors; these are references to the MZ800 colors */
+int mz7colors[8]={0,9,10,11,12,13,14,15};
 	   
 int palette[4];
 int palette_block;
 int blackwhite = 0;
+
+static unsigned char vidmem_old[4096];
+static unsigned char pcgram_old[4096];
 
 #if defined(__CYGWIN__)
 
@@ -215,7 +223,7 @@ void graphics_write(int addr, int value)
   if (!directvideo && !writeplaneb) {
     x = ((addr - 0x8000) % mzbpl) * 8; 
     y = (addr - 0x8000) / mzbpl;
-    vga_drawscansegment(buffer, x, y, 8);
+    REQ_GRAPHICS_UPDATE(buffer, x, y, 8);
   }
 
 }
@@ -324,7 +332,7 @@ void do_scroll(int start, int end, int delta)
 	for (y = start * _320 / 5 / mzbpl; 
 	     y < end * _320 / 5 / mzbpl; 
 	     y++, sptr+=mzbpl*8)
-	  vga_drawscansegment(sptr, 0, y, mzbpl * 8);
+	  REQ_GRAPHICS_UPDATE(sptr, 0, y, mzbpl * 8);
       }
     }
   }
@@ -370,7 +378,7 @@ void planeonoff(plane_struct *ps, int on)
     for (y = ps->y1; y<=ps->y2; b += mzbpl*8, a+= mzbpl*8, y++) {
       memcpy(a, b, c);
       if (!directvideo) 
-	vga_drawscansegment(b, (ps->x1/8)*8, y, c);
+	REQ_GRAPHICS_UPDATE(b, (ps->x1/8)*8, y, c);
     }
   }
 }
@@ -382,4 +390,116 @@ void clearscreen(int endaddr, int count, int color)
   /* FIXME: accelerate */
   for (; count; count--, endaddr--)
     graphics_write(endaddr, 0); 
+}
+
+/* maybe update the screen */
+update_scrn()
+{
+  static int count=0;
+  unsigned char *pageptr;
+  int x,y,mask,a,b,c,d;
+  unsigned char *ptr,*videoptr,*oldptr,*pcgptr,*tmp,fg,bg;
+  char pcgchange[512];
+
+  retrace=1;
+
+#if 0
+  countsec++;
+
+  if (RealTimer) {
+    if(countsec>=50)
+    {
+      /* if e007hi is 1, we're in the middle of writing/reading the time,
+       * so put off the change till next 1/50th.
+       */
+      if(e007hi!=1)
+	{
+	  timesec--;
+	  if(timesec<=0) {
+	    interrupted = 4; /* cause timer interrupt */
+	    timesec=0xa8c0;	/* 12 hrs in secs */
+	  }
+	  countsec=0;
+	}
+    }
+  }
+#endif
+
+  if (!mz800mode) {
+
+    /* only do it every 1/Nth */
+    count++;
+    /*   if(count<scrn_freq) return(0); else count=0; */
+
+#ifdef COPY_BANKSWITCH
+    if (memptr[13] == mem+VID_START) videoptr = visiblemem+0xD000;
+    else videoptr = mem+VID_START;
+    if (memptr[12] == mem+PCGRAM_START) pcgptr = visiblemem+0xC000;
+    else pcgptr = mem+PCGRAM_START;
+#else
+    videoptr = mem+VID_START;
+    pcgptr = mem+PCGRAM_START;
+#endif
+    ptr = videoptr;
+    oldptr=vidmem_old;
+
+    for (y=0; y<512; y++) {
+      pcgchange[y] = pcgptr[8*y]!=pcgram_old[8*y]
+	|| pcgptr[8*y+1]!=pcgram_old[8*y+1]
+	|| pcgptr[8*y+2]!=pcgram_old[8*y+2]
+	|| pcgptr[8*y+3]!=pcgram_old[8*y+3]
+	|| pcgptr[8*y+4]!=pcgram_old[8*y+4]
+	|| pcgptr[8*y+5]!=pcgram_old[8*y+5]
+	|| pcgptr[8*y+6]!=pcgram_old[8*y+6]
+	|| pcgptr[8*y+7]!=pcgram_old[8*y+7];
+    }
+
+#if defined(__CYGWIN__)
+    begin_draw();
+#endif
+    for(y=0;y<25;y++) {
+      int minx = 40, maxx = 0;
+      for(x=0;x<40;x++,ptr++,oldptr++) {
+	c=*ptr;
+	if(*oldptr!=c 
+	   || oldptr[2048]!=ptr[2048] 
+	   || pcgchange[(ptr[2048]&128 ? 256 : 0) + c]
+	   || refresh_screen)
+	  {
+	    if (x < minx) minx = x;
+	    if (x >= maxx) maxx = x + 1;
+	    fg=mz7colors[(ptr[2048]>>4)&7];
+	    bg=mz7colors[ ptr[2048]    &7];
+	    
+	    for(b=0;b<8;b++)
+	      {
+		tmp=(directvideo ? vptr : vbuffer)+(y*8+b)*320+x*8;
+		d=(mem+PCGRAM_START+(ptr[2048]&128 ? 2048 : 0))[c*8+b];
+		mask=1;
+		for(a=0;a<8;a++,mask<<=1)
+		  *tmp++=(d&mask)?fg:bg;
+	      }
+	  }
+      }
+      if (!directvideo && minx < 40) {
+	for (b=0; b<8; b++) 
+	  REQ_GRAPHICS_UPDATE(vbuffer + (y*8+b)*320+minx*8,
+			      minx * 8, y * 8 + b, 8 * (maxx-minx));
+      }
+    }
+#if defined(__CYGWIN__)
+    end_draw();
+#endif
+    /* now, copy new to old for next time */
+    memcpy(vidmem_old, videoptr, 4096);
+    memcpy(pcgram_old, pcgptr, 4096);
+  }
+#if defined(__CYGWIN__)
+  /* In Cygwin, updating at each graphics write is too expensive. So
+     we do the actual update here. */
+  else { /* MZ800 mode */
+    win_update_graphics();
+  }
+#endif
+  refresh_screen=0;
 }
