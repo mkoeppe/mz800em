@@ -38,6 +38,15 @@
 #  include <sys/stat.h>
 #  include <sys/soundcard.h>
 #  include <asm/io.h>  /* for LPT hack */
+#else
+#  define __DJGPP__
+/* FIXME */
+#endif
+#ifdef __DJGPP__
+#  include <sys/stat.h>
+#  include "scancode.h"
+#  define SA_RESTART 0
+#  define SA_ONESHOT 0
 #endif
 #include "z80.h"
 #include "mz700em.h"
@@ -49,22 +58,28 @@
 unsigned char mem[MEM_END];
 
 /* boots with ROM,ram,vram,mmI/O */
+/* but we begin with an all-RAM configuration 
+   and switch to the boot configuration using bankswitching ports. */
 unsigned char *memptr[16]=
 {
-  mem+ROM_START,	mem+RAM_START+0x1000,		/* 0000-1FFF */
+  mem+RAM_START,	mem+RAM_START+0x1000,		/* 0000-1FFF */
   mem+RAM_START+0x2000,	mem+RAM_START+0x3000,		/* 2000-3FFF */
   mem+RAM_START+0x4000,	mem+RAM_START+0x5000,		/* 4000-5FFF */
   mem+RAM_START+0x6000,	mem+RAM_START+0x7000,		/* 6000-7FFF */
   mem+RAM_START+0x8000,	mem+RAM_START+0x9000,		/* 8000-9FFF */
   mem+RAM_START+0xA000,	mem+RAM_START+0xB000,		/* A000-BFFF */
-  mem+RAM_START+0xC000,	mem+VID_START,			/* C000-DFFF */
-  mem+ROM800_START,     mem+ROM800_START+0x1000         /* E000-FFFF */
+  mem+RAM_START+0xC000,	mem+RAM_START+0xD000,		/* C000-DFFF */
+  mem+RAM_START+0xE000, mem+RAM_START+0xF000            /* E000-FFFF */
 };
+
+#ifdef COPY_BANKSWITCH
+unsigned char *visiblemem = mem + RAM_START;
+#endif
 
 /* first 4k and last 4k is ROM, but the rest is writeable */
 /* 2 means it's memory-mapped I/O. The first bytes at E000 are memory-mapped I/O;
    the rest is ROM */
-int memattr[16]={0,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,2,0};
+int memattr[16]={1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1};
 
 unsigned long tstates=0;
 unsigned long tsmax=70000L;
@@ -241,12 +256,14 @@ void dontpanic(a)
 {
   if(audio_fd!=-1) close(audio_fd);
 
+#if 0
   { /* RAM disk store */
     FILE *ramdisk;
     ramdisk = fopen("/tmp/mzramdisk", "w");
     fwrite(mem + RAMDISK_START, 1024, 64, ramdisk);
     fclose(ramdisk);
   }
+#endif
   fclose(cmtfile);
 #if defined(USE_RAWKEY)
   rawmode_exit();
@@ -357,7 +374,9 @@ int main(argc,argv)
 
   /*  portfile = fopen("/dev/port", "rw"); */ /* only for printer port hack */
 
+#ifdef linux
   ioperm(LPTPORT, 3, 1); /* allow LPT port access */
+#endif
 
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
 
@@ -411,6 +430,7 @@ int main(argc,argv)
     argv++, argc--;
   }
 
+#ifdef linux
   sa.sa_handler=dontpanic;
   sa.sa_mask=0;
   sa.sa_flags=SA_ONESHOT;
@@ -421,12 +441,20 @@ int main(argc,argv)
   sigaction(SIGTERM,&sa,NULL);
   sigaction(SIGQUIT,&sa,NULL);
   sigaction(SIGSEGV,&sa,NULL);
+#endif
 
   /* timer for speed control, screen update, etc */
 
+#ifdef __DJGPP__
+  sa.sa_handler=sighandler;
+  memset(&sa.sa_mask, 0, sizeof(sa.sa_mask));
+  sa.sa_flags=0;
+#endif
+#ifdef linux
   sa.sa_handler=sighandler;
   sa.sa_mask=0;
   sa.sa_flags=SA_RESTART;
+#endif
   if (!RealTimer)
     sigaction(SIGALRM,&sa,NULL);
   itv.it_value.tv_sec=  tmp/1000;
@@ -438,20 +466,28 @@ int main(argc,argv)
 
   /* timer for 8253 emulation */
 
+#ifdef linux
   if (RealTimer) {
     sa.sa_handler=sig8253handler;
     sa.sa_mask=0;
     sa.sa_flags=SA_RESTART;
     sigaction(SIGALRM,&sa,NULL);
   }
+#endif
 
   cont1 = 0x3cfb; /* the cont1 is driven at 15.6 kHz */
   cont2 = 0xa8c0; /* seconds in 12 hours */
 
+#ifdef linux
   if (RealTimer) {
     cont1 = 10; cont2 = 1; /* FIXME */ 
     set8253timer();
   }
+#endif
+
+  /* Switch to boot memory configuration */
+
+  out(0, 0xe4, 0);
   
   /* Init virtual disks */
   { 
@@ -487,13 +523,14 @@ int main(argc,argv)
 	  exec =buf[0x16]+256*buf[0x17];
 	  memcpy(mem+RAM_START+0x10F0,buf,0x80);
 	  
-	  fread(mem+RAM_START+start,1,len,in);	/* read the rest */
-	  fclose(in);
-
 	  if (start < 0x1000) {
 	    out(0, 0xe0, 0);
 	    out(0, 0xe1, 0);
 	  }
+
+	  fread(mem+RAM_START+start,1,len,in);	/* read the rest */
+	  fclose(in);
+
 	  initial_pc = exec;
 
 	}
@@ -529,13 +566,20 @@ int main(argc,argv)
   exit(0);
 }
 
+#ifdef linux
+#define libpath "/usr/local/lib"
+#endif
+#ifdef __DJGPP__
+#define libpath "."
+#endif
+
 loadrom()
      /*unsigned char *x;*/
 {
   int i;
   FILE *in;
 
-  if((in=fopen("/usr/local/lib/mz700.rom","rb"))!=NULL)
+  if((in=fopen(libpath "/mz700.rom","rb"))!=NULL)
     {
       fread(mem+ROM_START,1024,4,in);
       fclose(in);
@@ -546,7 +590,7 @@ loadrom()
       exit(1);
     }
 
-  if((in=fopen("/usr/local/lib/mz800.rom","rb"))!=NULL)
+  if((in=fopen(libpath "/mz800.rom","rb"))!=NULL)
     {
       fread(mem+ROM800_START,2048,4,in);
       fclose(in);
@@ -557,7 +601,7 @@ loadrom()
       exit(1);
     }
 
-  if((in=fopen("/usr/local/lib/mz700fon.dat","rb"))!=NULL)
+  if((in=fopen(libpath "/mz700fon.dat","rb"))!=NULL)
     {
       fread(mem+PCGROM_START,1024,4,in);
       memcpy(mem+PCGRAM_START, mem+PCGROM_START, 4096);
@@ -584,6 +628,28 @@ reset()
   interrupted = 2;
 }
 
+#ifdef COPY_BANKSWITCH
+
+void bankswitch(int block, unsigned char *address, int attr)
+{
+  if (memptr[block] != address) {
+    unsigned long *a = (unsigned long *) address;
+    unsigned long *b = (unsigned long *) (memptr[block]);
+    unsigned long t;
+    int i;
+    for (i = 0; i<1024; i++, a++, b++) t = *a, *a = *b, *b = t;
+    memptr[block] = address;
+  }
+  memattr[block] = attr;
+}
+
+#  define BANKSWITCH(block, addr, attr) bankswitch(block, mem+(addr), attr)
+#  define BANKSWITCHALT(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
+#else
+#  define BANKSWITCH(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
+#  define BANKSWITCHALT BANKSWITCH
+#endif
+
 unsigned int in(h,l)
      int h,l;
 {
@@ -592,39 +658,39 @@ unsigned int in(h,l)
   switch(l) {
   case 0xe0:
     /* make 1000-1fff PCG ROM and c000-cfff PCG RAM */
-    memptr[1] = mem + PCGROM_START; memattr[1] = 0;
+    BANKSWITCH(1, PCGROM_START, 0);
     if (mz800mode) {
       /* make 8000-bfff VIDEO RAM */
       /* this is not actually video ram but memory mapped I/O */
-      memptr[8] = mem + VID_START; memattr[8] = 2;
-      memptr[9] = mem + VID_START; memattr[9] = 2;
+      BANKSWITCHALT(8, VID_START, 2);
+      BANKSWITCHALT(9, VID_START, 2);
       if (DMD & 4) { /* 640x200 mode */
-	memptr[10] = mem + VID_START; memattr[10] = 2;
-	memptr[11] = mem + VID_START; memattr[11] = 2;
+	BANKSWITCHALT(10, VID_START, 2);
+	BANKSWITCHALT(11, VID_START, 2);
       }
       else { /* 320x200 mode */
-	memptr[10] = mem + RAM_START + 0xa000; memattr[10] = 1;
-	memptr[11] = mem + RAM_START + 0xb000; memattr[11] = 1;
+	BANKSWITCHALT(10, RAM_START + 0xa000, 1);
+	BANKSWITCHALT(11, RAM_START + 0xb000, 1);
       }
     }
     else {
       /* make c000-cfff PCG RAM */
-      memptr[12] = mem + PCGRAM_START; memattr[12] = 1;
+      BANKSWITCH(12, PCGRAM_START, 1);
     }
     return ts;
   case 0xe1:
     /* make 1000-1fff and c000-cfff RAM */
-    memptr[1]=mem+RAM_START+0x1000; memattr[1]=1;
+    BANKSWITCH(1, RAM_START+0x1000, 1);
     if (mz800mode) {
       /* make 8000-bfff RAM */
-      memptr[8] = mem + RAM_START + 0x8000; memattr[8] = 1;
-      memptr[9] = mem + RAM_START + 0x9000; memattr[9] = 1;
-      memptr[10] = mem + RAM_START + 0xa000; memattr[10] = 1;
-      memptr[11] = mem + RAM_START + 0xb000; memattr[11] = 1;
+      BANKSWITCHALT(8, RAM_START + 0x8000, 1);
+      BANKSWITCHALT(9, RAM_START + 0x9000, 1);
+      BANKSWITCHALT(10, RAM_START + 0xa000, 1);
+      BANKSWITCHALT(11, RAM_START + 0xb000, 1);
     }
     else {
       /* make c000-cfff RAM */
-      memptr[12]=mem+RAM_START+0xC000; memattr[12]=1;
+      BANKSWITCH(12, RAM_START+0xC000, 1);
     }
     return ts;
 
@@ -713,9 +779,9 @@ unsigned int out(h,l,a)
 	update_DMD(a);
 	if (old_mz800mode != mz800mode) {
 	  if (mz800mode) {
-	    memptr[13] = mem + RAM_START + 0xd000; memattr[13] = 1;
-	    memptr[14] = mem + RAM_START + 0xe000; memattr[14] = 1;
-	    memptr[15] = mem + RAM_START + 0xf000; memattr[15] = 1;
+	    BANKSWITCH(13, RAM_START + 0xd000, 1);
+	    BANKSWITCH(14, RAM_START + 0xe000, 1);
+	    BANKSWITCH(15, RAM_START + 0xf000, 1);
 	  }
 	  else refresh_screen = 1;
 	  update_palette();
@@ -758,8 +824,8 @@ unsigned int out(h,l,a)
       /* make 1000-1FFF RAM */
       if(!bs_inhibit)
 	{
-	  memptr[0]=mem+RAM_START; memattr[0]=1;
-	  memptr[1]=mem+RAM_START+0x1000; memattr[1]=1;
+	  BANKSWITCH(0, RAM_START, 1);
+	  BANKSWITCH(1, RAM_START+0x1000, 1);
 	}
       return(ts);
   
@@ -768,10 +834,10 @@ unsigned int out(h,l,a)
       if(!bs_inhibit)
 	{
 	  if (!mz800mode) {
-	    memptr[13]=mem+RAM_START+0xD000; memattr[13]=1;
+	    BANKSWITCH(13, RAM_START+0xD000, 1);
 	  }
-	  memptr[14]=mem+RAM_START+0xE000; memattr[14]=1;
-	  memptr[15]=mem+RAM_START+0xF000; memattr[15]=1;
+	  BANKSWITCH(14, RAM_START+0xE000, 1);
+	  BANKSWITCH(15, RAM_START+0xF000, 1);
 	}
       return(ts);
   
@@ -779,7 +845,7 @@ unsigned int out(h,l,a)
       /* make 0000-0FFF ROM */
       if(!bs_inhibit)
 	{
-	  memptr[0]=mem+ROM_START; memattr[0]=0;
+	  BANKSWITCH(0, ROM_START, 0);
 	}
       return(ts);
   
@@ -788,26 +854,26 @@ unsigned int out(h,l,a)
       if(!bs_inhibit)
 	{
 	  if (!mz800mode) {
-	    memptr[13]=mem+VID_START; memattr[13]=1;
+	    BANKSWITCH(13, VID_START, 1);
 	  }
-	  memptr[14]=mem+ROM800_START; memattr[14]=2;
-	  memptr[15]=mem+ROM800_START+0x1000; memattr[15]=0;
+	  BANKSWITCH(14, ROM800_START, 2);
+	  BANKSWITCH(15, ROM800_START+0x1000, 0);
 	}
       return(ts);
   
     case 0xe4:
       if (mz800mode) {
 	/* make 0000-0fff ROM */
-	memptr[0]=mem+ROM_START; memattr[0]=0;
+	BANKSWITCH(0, ROM_START, 0);
 	/* make 1000-1fff PCG ROM */
 	/* make 8000-bfff VIDEO RAM */
 	in(0, 0xe0);
 	/* make c000-dfff RAM */
-	memptr[12] = mem + RAM_START + 0xc000; memattr[12] = 1;
-	memptr[13] = mem + RAM_START + 0xd000; memattr[13] = 1;
+	BANKSWITCH(12, RAM_START + 0xc000, 1);
+	BANKSWITCH(13, RAM_START + 0xd000, 1);
 	/* make e000-ffff ROM */
-	memptr[14]=mem+ROM800_START; memattr[14]=0;
-	memptr[15]=mem+ROM800_START+0x1000; memattr[15]=0;
+	BANKSWITCH(14, ROM800_START, 0);
+	BANKSWITCH(15, ROM800_START+0x1000, 0);
       }
       else {
 	/* "Performs the same function as pressing the
@@ -965,7 +1031,7 @@ int mmio_in(addr)
     
       /* MZ800: access additional ROM */
     
-      return mem[ROM800_START + (addr - 0xE000)];
+      return *(unsigned char *)mempointer(addr) /*mem[ROM800_START + (addr - 0xE000)]*/;
 
     }
 }
@@ -1069,7 +1135,7 @@ update_scrn()
   static int count=0;
   unsigned char *pageptr;
   int x,y,mask,a,b,c,d;
-  unsigned char *ptr,*oldptr,*tmp,fg,bg;
+  unsigned char *ptr,*videoptr,*oldptr,*tmp,fg,bg;
 
   retrace=1;
 
@@ -1101,7 +1167,13 @@ update_scrn()
     count++;
     /*   if(count<scrn_freq) return(0); else count=0; */
 
-    ptr=mem+VID_START;
+#ifdef COPY_BANKSWITCH
+    if (memptr[13] == mem+VID_START) videoptr = mem+RAM_START+0xD000;
+    else videoptr = mem+VID_START;
+#else
+    videoptr = mem+VID_START;
+#endif
+    ptr = videoptr;
     oldptr=vidmem_old;
 
     for(y=0;y<25;y++)
@@ -1127,7 +1199,7 @@ update_scrn()
       }
 
     /* now, copy new to old for next time */
-    memcpy(vidmem_old,mem+VID_START,4096);
+    memcpy(vidmem_old, videoptr, 4096);
   }
   refresh_screen=0;
 }
@@ -1257,10 +1329,14 @@ update_kybd()
   /* byte 7 */
   if(is_key_pressed(SCANCODE_SLASH))	keyports[7]|=0x01;
   if(is_key_pressed(SCANCODE_F8))		keyports[7]|=0x02;	/* ? */
-  if(is_key_pressed(SCANCODE_CURSORLEFT))		keyports[7]|=0x04;
-  if(is_key_pressed(SCANCODE_CURSORRIGHT))	keyports[7]|=0x08;
-  if(is_key_pressed(SCANCODE_CURSORDOWN))		keyports[7]|=0x10;
-  if(is_key_pressed(SCANCODE_CURSORUP))		keyports[7]|=0x20;
+  if(is_key_pressed(SCANCODE_CURSORLEFT)
+     || is_key_pressed(SCANCODE_CURSORBLOCKLEFT))	keyports[7]|=0x04;
+  if(is_key_pressed(SCANCODE_CURSORRIGHT)
+     || is_key_pressed(SCANCODE_CURSORBLOCKRIGHT))	keyports[7]|=0x08;
+  if(is_key_pressed(SCANCODE_CURSORDOWN)
+     || is_key_pressed(SCANCODE_CURSORBLOCKDOWN))	keyports[7]|=0x10;
+  if(is_key_pressed(SCANCODE_CURSORUP)
+     || is_key_pressed(SCANCODE_CURSORBLOCKUP))		keyports[7]|=0x20;
   if(is_key_pressed(SCANCODE_REMOVE))		keyports[7]|=0x40;
   if(is_key_pressed(SCANCODE_INSERT))		keyports[7]|=0x80;
 
