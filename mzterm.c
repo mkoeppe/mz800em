@@ -27,6 +27,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "mz700em.h"
 #include "z80.h"
 #include "graphics.h"
@@ -66,7 +67,7 @@ int getmzkey()
 #endif
   needconsole();
 
-  if (is_key_pressed(SCANCODE_RIGHTSHIFT) && is_key_pressed(SCANCODE_RIGHTCONTROL) /* mzterm-ish */
+  if ((is_key_pressed(SCANCODE_RIGHTSHIFT) && is_key_pressed(SCANCODE_RIGHTCONTROL)) /* mzterm-ish */
       || ((is_key_pressed(SCANCODE_LEFTSHIFT) 
 #if defined(__CYGWIN__)
 	   || is_key_pressed(VK_SHIFT)
@@ -351,7 +352,7 @@ void pr(unsigned char c)
 
 #endif /* PRINT_INVOKES_ENSCRIPT */
 
-int print(unsigned char c)
+void print(unsigned char c)
 {
   if (printer_status & 4) {
     (*mempointer(0x1095))++; /* column counter */

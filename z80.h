@@ -38,7 +38,7 @@ extern volatile int intvec;
 extern int forceok;
 
 extern int loader(int);
-extern int diskloader(void *);
+extern void diskloader(void *);
 extern int cmthandler(int address, int length, int what);
 extern int basicfloppyhandler(int address, int length, 
 			      int sector, int drive, int write);
@@ -46,9 +46,9 @@ extern int basicfloppyhandler2(int tableaddress);
 extern int mztermservice(int channel, int width, int a, int sp);
 extern unsigned int in(int h, int l);
 extern unsigned int out(int h, int l, int a);
-extern int do_interrupt();
-extern int mainloop(unsigned short initial_pc, unsigned short initial_sp);
-extern int fix_tstates();
+extern void do_interrupt();
+extern void mainloop(unsigned short initial_pc, unsigned short initial_sp);
+extern void fix_tstates();
 extern void pending_interrupts_hack();
 extern void reset();
 

@@ -39,6 +39,7 @@
 #  include <sys/stat.h>
 #  include <sys/soundcard.h>
 #  include <asm/io.h>  /* for LPT hack */
+#  include <sys/ioctl.h>
 #endif
 #ifdef __CYGWIN__
 #  define unixish
@@ -131,11 +132,8 @@ int RealTimer = 0;
 #define RealTimer 0
 #endif
 
-int screen_dirty;
-int hsize=480,vsize=64;
 volatile int interrupted=0;
 volatile int intvec = 0xfe; /* default IM 2 vector */
-int input_wait=0;
 int scrn_freq=2;
 
 unsigned char keyports[10]={0,0,0,0,0, 0,0,0,0,0};
@@ -152,8 +150,6 @@ void key_handler(int scancode, int press);
 int refresh_screen=1;
 
 FILE *imagefile;
-/*FILE *portfile;*/
-
 FILE *printerfile = 0;
 
 int batch = 0;
@@ -342,6 +338,11 @@ void set8253timer()
   setitimer(ITIMER_REAL,&itv,NULL);
 }
 #endif
+
+void loadrom();
+void playsound();
+
+
 
 #if defined(__CYGWIN__)
 int semi_main(argc, argv)
@@ -568,10 +569,9 @@ int main(argc,argv)
   /* load RAM image */
   if (argc>=2) {
     FILE *in;
-    unsigned char buf[128],*ptr;
+    unsigned char buf[128];
     int ret=1;
     int start,len,exec;
-    int f;
     if ((in=fopen(argv[1],"rb"))!=NULL)
       {
 	fread(buf,1,4,in);
@@ -653,10 +653,8 @@ int main(argc,argv)
 #  define libpath "."
 #endif
 
-loadrom()
-     /*unsigned char *x;*/
+void loadrom()
 {
-  int i;
   FILE *in;
 
   if((in=fopen(libpath "/mz700.rom","rb"))!=NULL)
@@ -851,7 +849,6 @@ unsigned int out(h,l,a)
      int h,l,a;
 {
   static int ts=13;	/* num. t-states for this out */
-  time_t timet;
 
   /* h is ignored, except for l = 0xcf */
   switch(l)
@@ -1180,7 +1177,7 @@ void mmio_out(addr,val)
     case 0xE003: /* 8255 Control */
       /* Ignore 8255 modes, as there are not many sensible choices for MZ700/800. 
 	 Just assume we have the usual situation */
-      if (val & 0x80 == 0) {
+      if ((val & 0x80) == 0) {
 	/* Handle Channel C bit set/reset commands */
 	switch ((val >> 1) & 7) {
 	case 2: /* Bit 2 inhibits the 8253 timer interrupt. */
@@ -1270,7 +1267,7 @@ void key_handler(int scancode, int press)
 #  endif
 #endif
 
-update_kybd()
+void update_kybd()
 {
   int y;
 
@@ -1414,7 +1411,7 @@ update_kybd()
   for(y=0;y<10;y++) keyports[y]^=255;
 }
 
-fix_tstates()
+void fix_tstates()
 {
   tstates=0;
   if(do_sound)
@@ -1427,8 +1424,7 @@ fix_tstates()
 #endif
 }
 
-
-do_interrupt()
+void do_interrupt()
 {
 #if !defined(PRINT_INVOKES_ENSCRIPT)
   if (printerfile) fclose(printerfile), printerfile = 0;
@@ -1497,7 +1493,7 @@ struct dcb {
   unsigned short Dest;
 };
 
-int diskloader(void *c) {
+void diskloader(void *c) {
   struct dcb *cb = (void *) ((char *) c - 1);
   if (imagefile) {
     fseek(imagefile, ((int) cb->Sector) * 256, SEEK_SET);
@@ -1562,7 +1558,7 @@ int cmthandler(int address, int length, int what)
 }
 
 /* write 256 samples to /dev/dsp */
-playsound()
+void playsound()
 {
   static unsigned char buf[256];
   int f,soundfreq;

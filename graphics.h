@@ -33,6 +33,8 @@ extern int palette_block;
 extern int blackwhite;
 extern int mzcolors[16], mzgrays[16];
 
+void update_scrn();
+
 extern void update_WF(int a);
 extern void update_RF(int a);
 extern void update_DMD(int a);

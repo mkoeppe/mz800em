@@ -98,7 +98,7 @@ word16 _hlixiy[3];
 # define pc_ pc
 #endif
 
-mainloop(unsigned short initial_pc, unsigned short initial_sp)
+void mainloop(unsigned short initial_pc, unsigned short initial_sp)
 {
   unsigned char r, a1, f1, b1, c1, d1, e1, h1, l1, i, iff1, iff2, im;
 #ifndef USE_REGS

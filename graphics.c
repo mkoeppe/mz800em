@@ -21,19 +21,39 @@
 #include <stdlib.h>
 #ifdef linux
 #  include <vga.h>
-#  define REQ_GRAPHICS_UPDATE vga_drawscansegment
+#  if defined(DELAYED_UPDATE)
+#    define REQ_GRAPHICS_UPDATE req_graphics_update
+#    define FORCE_GRAPHICS_UPDATE do_update_graphics()
+#  else
+#    define REQ_GRAPHICS_UPDATE vga_drawscansegment
+#    define FORCE_GRAPHICS_UPDATE (void)(0)
+#  endif
+#  if defined(VGA16)
+#    include <asm/io.h>
+#  endif
 #endif
 #ifdef __CYGWIN__
 #  include <windows.h>
+/* FIXME: vga_drawscansegment is actually a req_graphics_update */
 #  define REQ_GRAPHICS_UPDATE vga_drawscansegment
+#  define FORCE_GRAPHICS_UPDATE do_update_graphics()
 #endif
 #include "z80.h"
 #include "mz700em.h"
 #include "graphics.h"
 
+#if defined(__CYGWIN__)
+#  define directvideo 0
+#else
+#  if defined(VGA16)
+#    define directvideo 1
+#  else 
+int directvideo=1;
+#  endif
+#endif
+
 int mz800mode=0;
 int mzbpl=40;
-int directvideo=1;
 int DMD=0;
 int WF, RF;
 int SCROLL[8], OLDSCROLL[8];
@@ -63,7 +83,9 @@ static unsigned char pcgram_old[4096];
 void update_DMD(int a)
 {
   vptr = 0;
+#if 0
   directvideo = 0;
+#endif
   if ((DMD & 4) != (a & 4)) {
     /* switch between 320 and 640 mode */
     if (a&4) { /* switch to 640 mode */
@@ -81,30 +103,83 @@ void update_DMD(int a)
 
 /* update_palette implemented in `mz800win.c'. */
 
-#else
+#else /* !__CYGWIN__ */
+
+#  if defined(DELAYED_UPDATE)
+
+static struct {
+  int bottom, top, left, right;
+} update_rect;
+
+void req_graphics_update(void *b, int x, int y, int pixels)
+{
+  if (update_rect.bottom > update_rect.top) {
+    if (y >= update_rect.bottom) update_rect.bottom = y+1;
+    else if (y < update_rect.top) update_rect.top = y;
+    if (x+pixels > update_rect.right) update_rect.right = x+pixels;
+    else if (x < update_rect.left) update_rect.left = x;
+  }
+  else {
+    update_rect.bottom = y+1;
+    update_rect.top = y;
+    update_rect.right = x+pixels;
+    update_rect.left = x;
+  }
+}
+
+void do_update_graphics()
+{
+  int y;
+  for (y = update_rect.top; y<update_rect.bottom; y++)
+    vga_drawscansegment(vbuffer + y*mzbpl*8 + update_rect.left,
+			update_rect.left, y, 
+			update_rect.right - update_rect.left);
+  update_rect.bottom = update_rect.top = 0;
+}
+
+#  endif /* DELAYED_UPDATE */
 
 void update_DMD(int a)
 {
   if (batch) {
+#if !defined(VGA16)
     directvideo = 1;
+#endif
     mzbpl = 40;
   }
   else {
-    if ((DMD & 4) != (a & 4)) {
+#if !defined(VGA16)
+    if ((DMD & 4) != (a & 4)) 
+#endif
+      {
       /* switch between 320 and 640 mode */
       if (a&4) { /* switch to 640 mode */
 	vga_setmode(G640x200x16);
+#if defined(VGA16)
+	vptr = vga_getgraphmem();
+	/*directvideo = 1;*/
+#else
 	vptr = 0; /* no direct writes */
 	directvideo = 0;
+#endif
 	mzbpl = 80;
       }
       else { /* switch to 320 mode */
+#if defined(VGA16)
+	vga_setmode(G320x200x16);
+	/*directvideo = 1;*/
+#else
 	vga_setmode(G320x200x256);
-	vptr = vga_getgraphmem();
 	directvideo = 1;
+#endif
+	vptr = vga_getgraphmem();
 	mzbpl = 40;
       }
       update_palette();
+#if defined(DELAYED_UPDATE)
+      update_rect.top = 0; 
+      update_rect.bottom = 200;
+#endif
     }
   }
   DMD = a & 7;
@@ -130,7 +205,7 @@ void update_palette()
   }
 }
 
-#endif
+#endif /* !__CYGWIN__ */
 
 /* common code */
 
@@ -138,48 +213,77 @@ static unsigned char writecolorplanes;
 static unsigned char resetcolorplanes;
 static int writeplaneb;
 static unsigned char *writeptr;
+static int readplaneb;
+static unsigned char readcolorplanes;
+static unsigned char colormask;
+unsigned char *readptr;
 
-void update_WF(int a)
+#if defined(VGA16)
+
+/* mirror-a-byte */
+static unsigned char mirror[256];
+
+void setup_mirror(void) __attribute__ ((constructor));
+void setup_mirror(void)
 {
-  WF = a;
-  if (DMD & 2) { /* 320x200x16 or 640x200x4 */
-    writeplaneb = 0;
-    if (DMD & 4) /* 640 */ writecolorplanes = (WF&1) | ((WF>>1)&2), 
-			     resetcolorplanes = ~3;
-    else /* 320 */ writecolorplanes = WF & 0x0F,
-		     resetcolorplanes = ~0x0F;
-  }
-  else { /* 320x200x4 or 640x200x2 */
-    if (WF & 0x80) { /* REPLACE or PSET */
-      writeplaneb = WF & 0x10; /* use A/B flag */
-      writecolorplanes = writeplaneb ? WF>>2 : WF;
-      if (DMD & 4) /* 640 */ writecolorplanes &= 1,
-			       resetcolorplanes = ~1;
-      else /* 320 */ writecolorplanes &= 3,
-		       resetcolorplanes = ~3;
-    }
-    else { /* Single, XOR, OR, or RESET */
-      writeplaneb = WF & 0x0C; /* Ignore A/B flag */
-      writecolorplanes = writeplaneb ? (WF>>2)&3 : WF&3;
-      resetcolorplanes = ~3;
-    }
-  }
-  resetcolorplanes |= writecolorplanes;
-
-  if (directvideo) {
-    if (writeplaneb) /* plane B */
-      writeptr = vbuffer + 0x20000;
-    else /* plane A */
-      writeptr = vptr;
-  }
-  else {
-    if (writeplaneb) /* plane B */
-      writeptr = vbuffer + 0x20000;
-    else { /* plane A */
-      writeptr = vbuffer;
-    }
-  }
+  int i;
+  for (i = 0; i<256; i++)
+    mirror[i] = (i&0x01?0x80:0) 
+      | (i&0x02?0x40:0) 
+      | (i&0x04?0x20:0)
+      | (i&0x08?0x10:0) 
+      | (i&0x10?0x08:0) 
+      | (i&0x20?0x04:0) 
+      | (i&0x40?0x02:0) 
+      | (i&0x80?0x01:0);
 }
+
+static void set_write_mode(int m) 
+{
+  outb(5, 0x3ce);
+  outb((inb(0x3cf)&~3)|m, 0x3cf);
+}
+
+static void set_rotate(int m)
+{
+  outb(3, 0x3ce);
+  outb(m, 0x3cf);
+}
+
+static void set_map_mask(int m)
+{
+  outb(2, 0x3c4);
+  outb(m, 0x3c5);
+}
+
+static void set_setreset(int m)
+{
+  outb(0, 0x3ce);
+  outb(m, 0x3cf);
+}
+
+void graphics_write(int addr, int value)
+{
+  volatile unsigned char *pptr;
+  pptr = writeptr + addr - 0x8000;
+  *pptr; /* fill vga latches */
+  if ((WF&(6<<5))==(4<<5)) /* replace */ {
+    /* FIXME: */
+    set_setreset(0);
+    *pptr = 0xff;
+    set_setreset(writecolorplanes);
+  }
+  *pptr = mirror[value];
+}
+
+int graphics_read(int addr)
+{
+  int i;
+  unsigned char *pptr = readptr + addr - 0x8000;
+  return 0;
+}
+
+#else /* !VGA16 */
 
 void graphics_write(int addr, int value)
 {
@@ -228,10 +332,110 @@ void graphics_write(int addr, int value)
 
 }
 
-static int readplaneb;
-static unsigned char readcolorplanes;
-static unsigned char colormask;
-unsigned char *readptr;
+int graphics_read(int addr)
+{
+  int i;
+  unsigned char *pptr = readptr + (addr - 0x8000) * 8;
+  int result = 0;
+
+  switch (RF >> 7) {
+  case 0: /* READ */
+    for (i = 0; i<8; i++, pptr++, result>>=1)
+      if (*pptr & readcolorplanes) result |= 0x100;
+    return result;
+  case 1: /* FIND */
+    for (i = 0; i<8; i++, pptr++, result>>=1)
+      if ((*pptr & colormask) == readcolorplanes) result |= 0x100;
+    return result;
+  }
+  return 0;
+}
+
+#endif /* !VGA16 */
+
+void update_WF(int a)
+{
+  WF = a;
+  if (DMD & 2) { /* 320x200x16 or 640x200x4 */
+    writeplaneb = 0;
+    if (DMD & 4) /* 640 */ writecolorplanes = (WF&1) | ((WF>>1)&2), 
+			     resetcolorplanes = ~3;
+    else /* 320 */ writecolorplanes = WF & 0x0F,
+		     resetcolorplanes = ~0x0F;
+  }
+  else { /* 320x200x4 or 640x200x2 */
+    if (WF & 0x80) { /* REPLACE or PSET */
+      writeplaneb = WF & 0x10; /* use A/B flag */
+      writecolorplanes = writeplaneb ? WF>>2 : WF;
+      if (DMD & 4) /* 640 */ writecolorplanes &= 1,
+			       resetcolorplanes = ~1;
+      else /* 320 */ writecolorplanes &= 3,
+		       resetcolorplanes = ~3;
+    }
+    else { /* Single, XOR, OR, or RESET */
+      writeplaneb = WF & 0x0C; /* Ignore A/B flag */
+      writecolorplanes = writeplaneb ? (WF>>2)&3 : WF&3;
+      resetcolorplanes = ~3;
+    }
+  }
+  resetcolorplanes |= writecolorplanes;
+
+#if defined(VGA16)
+  if (writeplaneb) writeptr = vptr + 0x8000;
+  else writeptr = vptr;
+
+  switch (WF >> 5) {
+  case 0: /* Single write -- write to addressed planes */
+    set_write_mode(0); 
+    set_rotate(0);
+    set_map_mask(writecolorplanes);
+    break;
+  case 1: /* XOR */
+    set_write_mode(0);
+    set_rotate(0x18);
+    set_map_mask(writecolorplanes);
+    break;
+  case 2: /* OR */
+    set_write_mode(0);
+    set_rotate(0x10);
+    set_map_mask(writecolorplanes);
+    break;
+  case 3: /* RESET */
+    set_write_mode(0);
+    set_rotate(0x08);
+    set_map_mask(writecolorplanes);
+    break;
+  case 4: /* REPLACE */
+  case 5:
+    set_write_mode(3);
+    set_rotate(0);
+    set_setreset(writecolorplanes);
+    set_map_mask(0xff);
+    break;
+  case 6: /* PSET */
+  case 7:
+    set_write_mode(3);
+    set_rotate(0);
+    set_setreset(writecolorplanes);
+    set_map_mask(0xff);
+    break;
+  }
+#else
+  if (directvideo) {
+    if (writeplaneb) /* plane B */
+      writeptr = vbuffer + 0x20000;
+    else /* plane A */
+      writeptr = vptr;
+  }
+  else {
+    if (writeplaneb) /* plane B */
+      writeptr = vbuffer + 0x20000;
+    else { /* plane A */
+      writeptr = vbuffer;
+    }
+  }
+#endif
+}
 
 void update_RF(int a)
 {
@@ -263,24 +467,6 @@ void update_RF(int a)
       readptr = vbuffer + 0x20000;
     else /* plane A */
       readptr = vbuffer;
-  }
-}
-
-int graphics_read(int addr)
-{
-  int i;
-  unsigned char *pptr = readptr + (addr - 0x8000) * 8;
-  int result = 0;
-
-  switch (RF >> 7) {
-  case 0: /* READ */
-    for (i = 0; i<8; i++, pptr++, result>>=1)
-      if (*pptr & readcolorplanes) result |= 0x100;
-    return result;
-  case 1: /* FIND */
-    for (i = 0; i<8; i++, pptr++, result>>=1)
-      if ((*pptr & colormask) == readcolorplanes) result |= 0x100;
-    return result;
   }
 }
 
@@ -380,6 +566,7 @@ void planeonoff(plane_struct *ps, int on)
       if (!directvideo) 
 	REQ_GRAPHICS_UPDATE(b, (ps->x1/8)*8, y, c);
     }
+    FORCE_GRAPHICS_UPDATE;
   }
 }
 
@@ -390,40 +577,18 @@ void clearscreen(int endaddr, int count, int color)
   /* FIXME: accelerate */
   for (; count; count--, endaddr--)
     graphics_write(endaddr, 0); 
+  FORCE_GRAPHICS_UPDATE;
 }
 
 /* maybe update the screen */
-update_scrn()
+void update_scrn()
 {
   static int count=0;
-  unsigned char *pageptr;
   int x,y,mask,a,b,c,d;
   unsigned char *ptr,*videoptr,*oldptr,*pcgptr,*tmp,fg,bg;
   char pcgchange[512];
 
   retrace=1;
-
-#if 0
-  countsec++;
-
-  if (RealTimer) {
-    if(countsec>=50)
-    {
-      /* if e007hi is 1, we're in the middle of writing/reading the time,
-       * so put off the change till next 1/50th.
-       */
-      if(e007hi!=1)
-	{
-	  timesec--;
-	  if(timesec<=0) {
-	    interrupted = 4; /* cause timer interrupt */
-	    timesec=0xa8c0;	/* 12 hrs in secs */
-	  }
-	  countsec=0;
-	}
-    }
-  }
-#endif
 
   if (!mz800mode) {
 
@@ -483,7 +648,7 @@ update_scrn()
       }
       if (!directvideo && minx < 40) {
 	for (b=0; b<8; b++) 
-	  REQ_GRAPHICS_UPDATE(vbuffer + (y*8+b)*320+minx*8,
+	  vga_drawscansegment(vbuffer + (y*8+b)*320+minx*8,
 			      minx * 8, y * 8 + b, 8 * (maxx-minx));
       }
     }
@@ -494,11 +659,14 @@ update_scrn()
     memcpy(vidmem_old, videoptr, 4096);
     memcpy(pcgram_old, pcgptr, 4096);
   }
-#if defined(__CYGWIN__)
+#if defined(__CYGWIN__) || defined(DELAYED_UPDATE)
   /* In Cygwin, updating at each graphics write is too expensive. So
      we do the actual update here. */
   else { /* MZ800 mode */
-    win_update_graphics();
+#  if defined(DELAYED_UPDATE)
+    if (!directvideo) 
+#  endif
+      do_update_graphics();
   }
 #endif
   refresh_screen=0;

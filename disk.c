@@ -19,6 +19,7 @@
  */
 
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #if defined(__CYGWIN__)
 /* dont have glob */
@@ -156,7 +157,7 @@ static void MakeDirectory(char *path)
 char *RealName(char *dest, DirEntry *entry)
 {
   char *p = dest;
-  char i;
+  int i;
   if (entry->mangleflag == 1) { /* keep all-capital name coding */ 
     *p++ = '_';
     for (i = 0; i <= 6 && entry->name[i] != 0x0d; i++)
