@@ -43,7 +43,7 @@ extern int cmthandler(int address, int length, int what);
 extern int basicfloppyhandler(int address, int length, 
 			      int sector, int drive, int write);
 extern int basicfloppyhandler2(int tableaddress);
-extern int mztermservice(int channel, int width);
+extern int mztermservice(int channel, int width, int a);
 extern unsigned int in(int h, int l);
 extern unsigned int out(int h, int l, int a);
 extern int do_interrupt();
