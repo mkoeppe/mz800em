@@ -38,6 +38,7 @@
 #endif
 #include "z80.h"
 #include "mz700em.h"
+#include "graphics.h"
 
 #define LPTPORT 0x378
 
@@ -67,12 +68,6 @@ unsigned long tsmax=70000L;
 int ints_per_second = 50;
 int countsec=0;
 int bs_inhibit=0;
-int mz800mode=0;
-int mzbpl=40;
-int directvideo=1;
-int DMD=0;
-int WF, RF;
-int SCROLL[8], OLDSCROLL[8];
 int ramdisk_addr;
 char PortD9;
 int pb_select=0;	/* selected kport to read */
@@ -109,8 +104,6 @@ int screen_dirty;
 int hsize=480,vsize=64;
 volatile int interrupted=0;
 volatile int intvec = 0xfe; /* default IM 2 vector */
-unsigned char *vptr; /* real screen buffer */
-unsigned char *vbuffer; /* virtual screen buffer */ 
 int input_wait=0;
 int scrn_freq=2;
 
@@ -136,20 +129,6 @@ int mzcol2vga[8]={0,1,4,5,2,3,14,15};
 /* ...but curiously, *these* tend to look better in practice. */
 int mzcol2vga[8]={0,9,12,13,10,11,14,15};
 #endif
-
-/* MZ800 colors */
-int mzcolors[16] = {0x000000, 0x000020, 0x002000, 0x002020,
-		    0x200000, 0x200020, 0x202000, 0x2a2a2a,
-		    0x151515, 0x00003f, 0x003f00, 0x003f3f,
-		    0x3f0000, 0x3f003f, 0x3f3f00, 0x3f3f3f};
-int mzgrays[16] = {0x000000, 0x040404, 0x080808, 0x0c0c0c,
-		   0x181818, 0x1c1c1c, 0x282828, 0x303030,
-		   0x101010, 0x141414, 0x202020, 0x242424,
-		   0x2c2c2c, 0x343434, 0x383838, 0x3c3c3c};
-		   
-int palette[4];
-int palette_block;
-int blackwhite = 0;
 
 int pending_timer_interrupts;
 int pending_vbln_interrupts;
@@ -299,8 +278,6 @@ char inportb(int port)
   return inb(port);
 }
 
-void init_scroll();
-
 void set8253timer()
 {
   struct itimerval itv;
@@ -397,10 +374,7 @@ int main(argc,argv)
   vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
   rawmode_init();
 
-#if 0
   set_switch_functions(screenoff,screenon);
-#endif
-  set_switch_functions(dummy,dummy);
   allow_switch(1);
 
   for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
@@ -591,11 +565,6 @@ reset()
   interrupted = 2;
 }
 
-void graphics_write(int addr, int value);
-int graphics_read(int addr);
-void scroll();
-void update_palette();
-
 unsigned int in(h,l)
      int h,l;
 {
@@ -711,34 +680,18 @@ unsigned int out(h,l,a)
 
     case 0xcc:
       /* MZ800 write format register */
-      WF = a & 255;
+      update_WF(a & 255);
       return(ts);
     case 0xcd:
       /* MZ800 read format register */
-      RF = a & 255;
+      update_RF(a & 255);
       return(ts);
     case 0xce:
       /* MZ800 display mode register -- set MZ700/MZ800 mode here */
       {
 	int old_mz800mode = mz800mode;
 	mz800mode = ((a & 8) != 8);
-	if ((DMD & 4) != (a & 4)) {
-	  /* switch between 320 and 640 mode */
-	  if (a&4) { /* switch to 640 mode */
-	    vga_setmode(G640x200x16);
-	    vptr = 0; /* no direct writes */
-	    directvideo = 0;
-	    mzbpl = 80;
-	  }
-	  else { /* switch to 320 mode */
-	    vga_setmode(G320x200x256);
-	    vptr = vga_getgraphmem();
-	    directvideo = 1;
-	    mzbpl = 40;
-	  }
-	  update_palette();
-	}
-	DMD = a & 7;
+	update_DMD(a);
 	if (old_mz800mode != mz800mode) {
 	  if (mz800mode) {
 	    memptr[13] = mem + RAM_START + 0xd000; memattr[13] = 1;
@@ -1091,7 +1044,7 @@ void mmio_out(addr,val)
     }
 }
 
-/* redraw the screen */
+/* redraw the screen (MZ700 mode) */
 update_scrn()
 {
   static int count=0;
@@ -1469,225 +1422,6 @@ playsound()
 
   /* this runs instead of alarm int, so... */
   if(interrupted<2) interrupted=1;
-}
-
-
-void graphics_write(int addr, int value)
-{
-  int i;
-  int x, y;
-  unsigned char colorplanes;
-  int planeb;
-  unsigned char *pptr, *buffer;
-
-  if (DMD & 2) { /* 320x200x16 or 640x200x4 */
-    planeb = 0;
-    if (DMD & 4) /* 640 */ colorplanes = (WF&1) | ((WF>>1)&2);
-    else /* 320 */ colorplanes = WF & 0x0F;
-  }
-  else { /* 320x200x4 or 640x200x2 */
-    if (WF & 0x80) { /* REPLACE or PSET */
-      planeb = WF & 0x10; /* use A/B flag */
-      colorplanes = planeb ? WF>>2 : WF;
-      if (DMD & 4) /* 640 */ colorplanes &= 1;
-      else colorplanes &= 3;
-    }
-    else { /* Single, XOR, OR, or RESET */
-      planeb = WF & 0x0C; /* Ignore A/B flag */
-      colorplanes = planeb ? (WF>>2)&3 : WF&3;
-    }
-  }
-
-  if (directvideo) {
-    if (planeb) /* plane B */
-      pptr = vbuffer + 0x20000 + (addr - 0x8000) * 8;
-    else /* plane A */
-      pptr = vptr + (addr - 0x8000) * 8;
-  }
-  else {
-    if (planeb) /* plane B */
-      pptr = vbuffer + 0x20000 + (addr - 0x8000) * 8;
-    else { /* plane A */
-      pptr = buffer = vbuffer + (addr - 0x8000) * 8;
-      x = ((addr - 0x8000) % mzbpl) * 8; 
-      y = (addr - 0x8000) / mzbpl;
-    }
-  }
-  switch (WF >> 5) {
-  case 0: /* Single write -- write to addressed planes */
-    for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr |= colorplanes;
-      else *pptr &=~ colorplanes;
-    break;
-  case 1: /* XOR */
-    for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr ^= colorplanes;
-    break;
-  case 2: /* OR */
-    for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr |= colorplanes;
-    break;
-  case 3: /* RESET */
-    for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr &=~ colorplanes;
-    break;
-  case 4: /* REPLACE */
-  case 5:
-    for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr = colorplanes;
-      else *pptr = 0;
-    break;
-  case 6: /* PSET */
-  case 7:
-    for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr = colorplanes;
-    break;
-  }
-  if (!directvideo && !planeb) {
-    vga_drawscansegment(buffer, x, y, 8);
-  }
-}
-
-int graphics_read(int addr)
-{
-  int i;
-  unsigned char *pptr;
-  int result = 0;
-  int planeb;
-  unsigned char colorplanes;
-  unsigned char colormask;
-
-  switch (DMD & 6) {
-  case 0: colormask = 3; break;
-  case 2: colormask = 15; break;
-  case 4: colormask = 1; break;
-  case 6: colormask = 3; 
-  }
-
-  if (DMD & 2) { /* 320x200x16 or 640x200x4 */
-    planeb = 0;
-    if (DMD & 4) colorplanes = (RF&1) | ((RF>>1)&2);
-    else colorplanes = RF;
-  }
-  else { /* 320x200x4 or 640x200x2 */
-    planeb = RF & 0x10; /* use A/B flag */
-    colorplanes = planeb ? RF>>2 : RF;
-  }
-  colorplanes &= colormask;
-
-  if (directvideo && !planeb) {
-    pptr = vptr + (addr - 0x8000) * 8;
-  }
-  else {
-    if (planeb) /* plane B */
-      pptr = vbuffer + 0x20000 + (addr - 0x8000) * 8;
-    else /* plane A */
-      pptr = vbuffer + (addr - 0x8000) * 8;
-  }
-
-  switch (RF >> 7) {
-  case 0: /* READ */
-    for (i = 0; i<8; i++, pptr++, result>>=1)
-      if (*pptr & colorplanes) result |= 0x100;
-    return result;
-  case 1: /* FIND */
-    for (i = 0; i<8; i++, pptr++, result>>=1)
-      if ((*pptr & colormask) == colorplanes) result |= 0x100;
-    return result;
-  }
-}
-
-#define SOF1 (SCROLL[1])
-#define SOF2 (SCROLL[2])
-#define SOF (((int) SOF2 & 7) << 8 | (SOF1))
-#define SW (SCROLL[3])
-#define SSA (SCROLL[4])
-#define SEA (SCROLL[5])
-#define BCOL (SCROLL[6])
-#define CKSW (SCROLL[7])
-
-#define OSOF1 (OLDSCROLL[1])
-#define OSOF2 (OLDSCROLL[2])
-#define OSOF (((int) OSOF2 & 7) << 8 | (OSOF1))
-#define OSW (OLDSCROLL[3])
-#define OSSA (OLDSCROLL[4])
-#define OSEA (OLDSCROLL[5])
-#define OBCOL (OLDSCROLL[6])
-#define OCKSW (OLDSCROLL[7])
-
-#define _320 (8 * mzbpl)
-
-void do_scroll(int start, int end, int delta) 
-{
-  if (delta) { 
-    unsigned char *sptr = (directvideo ? vptr : vbuffer) + (start * 8 * _320 / 5);
-
-    int size = (end - start) * 8 * _320 / 5;
-    if (size > 0) {
-      /* make copy of the scroll area */
-      unsigned char *buf = malloc(size);
-      memcpy(buf, sptr, size);
-      /* copy back, scrolled */
-      if (delta < 0) {
-	memcpy(sptr + (-delta * _320 / 5), buf, size - (-delta * _320 / 5));
-	memcpy(sptr, buf + size - (-delta * _320 / 5), (-delta * _320 / 5));
-      }
-      else {
-	memcpy(sptr, buf + (delta * _320 / 5), size - (delta * _320 / 5));
-	memcpy(sptr + size - (delta * _320 / 5), buf, (delta * _320 / 5));
-      }
-      /* release buffer */
-      free(buf);
-
-      if (!directvideo) { /* copy scrolled region back to screen */
-	int y;
-	for (y = start * _320 / 5 / mzbpl; 
-	     y < end * _320 / 5 / mzbpl; 
-	     y++, sptr+=mzbpl*8)
-	  vga_drawscansegment(sptr, 0, y, mzbpl * 8);
-      }
-    }
-  }
-}
-
-void scroll()
-{
-  if (SSA != OSSA || SEA != OSEA) {
-    /* scroll back to offset 0 */
-    do_scroll(OSSA, OSEA, -OSOF);
-    OSOF1 = OSOF2 = 0;
-  }
-  /* scroll to current offset */
-  if (SOF != OSOF) do_scroll(SSA, SEA, SOF - OSOF);
-  /* FIXME: Handle BCOL and CKSW registers */
-  
-  memcpy(OLDSCROLL, SCROLL, 8 * sizeof(int));
-}
-
-void init_scroll()
-{
-  SOF1 = OSOF1 = 0;
-  SOF2 = OSOF2 = 0;
-  SW = OSW = 0x7d;
-  SEA = OSEA = 0x7d;
-  SSA = OSSA = 0;
-  BCOL = OBCOL = 0;
-}
-
-void update_palette()
-{
-  int i;
-  int color;
-  int *colors = blackwhite ? mzgrays : mzcolors;
-  for (i = 0; i < 16; i++) {
-    if (mz800mode) {
-      if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
-      else color = colors[i];
-    }
-    else color = colors[i];
-    vga_setpalette(i,
-		   (color >> 8) & 63, (color >> 16) & 63, color & 63);
-  }
 }
 
 /*void init_ramdisk()
