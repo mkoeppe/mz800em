@@ -18,20 +18,19 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <vgakeyboard.h>
+#ifdef linux
+#  include <vgakeyboard.h>
+#endif
+#ifdef __CYGWIN__
+#  include "mz800win.h"
+#  include "scancode.h"
+#  include <sys/time.h>
+#endif
+
 #include <time.h>
 #include <stdio.h>
 #include "mz700em.h"
 #include "z80.h"
-
-#ifdef linux
-#else
-#  define __DJGPP__
-/* FIXME */
-#endif
-#ifdef __DJGPP__
-#  include "scancode.h"
-#endif
 
 /* You need a special patched version of the DBASIC interpreter to use 
    the services provided in this file. */
@@ -52,6 +51,12 @@ static void needconsole()
 #define L(n, s) (ctrl ? 0 : (shift^scrolllock ? s : n))
 #define CL(n, s) (ctrl ? n - '@' : (shift^scrolllock ? s : n))
 
+#if defined(__CYGWIN__)
+#  define is_key_pressed(k) GetAsyncKeyState(k)
+#else
+#  define is_key_pressed(k) key_state[k]
+#endif
+
 /* Proper keyboard interface; German keyboard layout. */
 int getmzkey()
 {
@@ -59,9 +64,9 @@ int getmzkey()
   
   needconsole();
 
-  if (key_state[SCANCODE_RIGHTSHIFT] && key_state[SCANCODE_RIGHTCONTROL] /* mzterm-ish */
-      || ((key_state[SCANCODE_LEFTSHIFT] || key_state[SCANCODE_RIGHTSHIFT])
-	  && key_state[SCANCODE_BACKSPACE] /* mz800em-ish break */ )) {
+  if (is_key_pressed(SCANCODE_RIGHTSHIFT) && is_key_pressed(SCANCODE_RIGHTCONTROL) /* mzterm-ish */
+      || ((is_key_pressed(SCANCODE_LEFTSHIFT) || is_key_pressed(SCANCODE_RIGHTSHIFT))
+	  && is_key_pressed(SCANCODE_BACKSPACE) /* mz800em-ish break */ )) {
     static long last_async_break = 0;
     long ticks;
     struct timeval tv;
@@ -80,26 +85,32 @@ int getmzkey()
   c = codering[front];
   front = (front+1) % CODERINGSIZE;
 
-  if (!(c&0x80)) coderingdowncount--;
+  if (!(c&0x8000)) coderingdowncount--;
 
-  switch (c & 0x7f) {
+#if defined(__CYGWIN__)
+  shift = GetAsyncKeyState(SCANCODE_LEFTSHIFT) || GetAsyncKeyState(SCANCODE_RIGHTSHIFT);
+  ctrl = GetAsyncKeyState(SCANCODE_RIGHTCONTROL) || GetAsyncKeyState(SCANCODE_LEFTCONTROL);
+  alt = GetAsyncKeyState(SCANCODE_RIGHTALT) || GetAsyncKeyState(SCANCODE_LEFTALT);
+#else
+  switch (c & 0x7fff) {
   case SCANCODE_RIGHTCONTROL:
   case SCANCODE_LEFTCONTROL:	
-    ctrl = !(c&0x80); 
+    ctrl = !(c&0x8000); 
     return 0;
   case SCANCODE_LEFTSHIFT:	
-    shift = !(c&0x80); 
+    shift = !(c&0x8000); 
     return 0;
   case SCANCODE_RIGHTSHIFT:	
-    rightshift = shift = !(c&0x80); 
+    rightshift = shift = !(c&0x8000); 
     return 0;
   case SCANCODE_RIGHTALT:
   case SCANCODE_LEFTALT:	
-    alt = !(c&0x80); 
+    alt = !(c&0x8000); 
     return 0;
   }
-
-  if (c&0x80) return 0; /* key up */
+#endif
+  
+  if (c&0x8000) return 0; /* key up */
 
   if (coderingdowncount) return 0;
 
@@ -149,8 +160,10 @@ int getmzkey()
   case SCANCODE_BRACKET_LEFT: return L(0xb2, 0xad);
   case SCANCODE_BRACKET_RIGHT: return A('+', '*', 0x94);
 
-  case SCANCODE_KEYPADENTER:
-  case SCANCODE_ENTER:	
+    case SCANCODE_KEYPADENTER:
+#if SCANCODE_KEYPADENTER!=SCANCODE_ENTER
+    case SCANCODE_ENTER:
+#endif
     return 0x0d;
 
   case SCANCODE_LEFTCONTROL: return 0;
@@ -176,8 +189,10 @@ int getmzkey()
   case SCANCODE_M:	return CL('M', 0xb3);
   case SCANCODE_COMMA:	return S(',', ';');
   case SCANCODE_PERIOD: return S('.', ':');
-  case SCANCODE_SLASH:	return S('-', '_');
-  case SCANCODE_SPACE:	return ' ';
+#if !defined(__CYGWIN__)
+    case SCANCODE_SLASH:	return S('-', '_');
+#endif
+    case SCANCODE_SPACE:	return ' ';
   case SCANCODE_CAPSLOCK: 
     capslock = !capslock;
     return 0;
@@ -222,23 +237,23 @@ int getmzkey()
   case SCANCODE_HOME:	
     return 0x15;
   case SCANCODE_CURSORUP:
-  case SCANCODE_CURSORBLOCKUP: 
+    case SCANCODE_CURSORBLOCKUP:
     return rightshift ? 0xd1 : 0x12;
   case SCANCODE_CURSORUPRIGHT:
-  case SCANCODE_PAGEUP: 
-    return 0;
+    case SCANCODE_PAGEUP: 
+      return 0;
   case SCANCODE_CURSORLEFT:
-  case SCANCODE_CURSORBLOCKLEFT: 
-    return rightshift ? 0xd3 : 0x14;
+    case SCANCODE_CURSORBLOCKLEFT: 
+      return rightshift ? 0xd3 : 0x14;
   case SCANCODE_CURSORRIGHT:
   case SCANCODE_CURSORBLOCKRIGHT: 
     return rightshift ? 0xd2 : 0x13;
   case SCANCODE_CURSORDOWNLEFT:
-  case SCANCODE_END: 
-    return 0;
+    case SCANCODE_END: 
+      return 0;
   case SCANCODE_CURSORDOWN:
-  case SCANCODE_CURSORBLOCKDOWN: 
-    return rightshift ? 0xd0 : 0x11;
+    case SCANCODE_CURSORBLOCKDOWN: 
+      return rightshift ? 0xd0 : 0x11;
   case SCANCODE_CURSORDOWNRIGHT:
   case SCANCODE_PAGEDOWN: 
     return 0;
@@ -249,7 +264,10 @@ int getmzkey()
   case SCANCODE_KEYPADDIVIDE:	return '/';
   case SCANCODE_PRINTSCREEN:	return 0;
   case SCANCODE_BREAK:
-  case SCANCODE_BREAK_ALTERNATIVE: return 0;
+#if SCANCODE_BREAK!=SCANCODE_BREAK_ALTERNATIVE
+    case SCANCODE_BREAK_ALTERNATIVE:
+#endif
+      return 0;
 
   }
   return 0;
