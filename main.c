@@ -29,12 +29,15 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <vga.h>
-#include <rawkey.h>
+#include <vgakeyboard.h>
+#if defined(USE_RAWKEY)
+#  include <rawkey.h>
+#endif
 #include <time.h>
 #ifdef linux
-#include <sys/stat.h>
-#include <sys/soundcard.h>
-#include <asm/io.h>  /* for LPT hack */
+#  include <sys/stat.h>
+#  include <sys/soundcard.h>
+#  include <asm/io.h>  /* for LPT hack */
 #endif
 #include "z80.h"
 #include "mz700em.h"
@@ -108,8 +111,9 @@ int input_wait=0;
 int scrn_freq=2;
 
 unsigned char keyports[10]={0,0,0,0,0, 0,0,0,0,0};
+#if defined(USE_RAWKEY)
 int scancode[128];
-int keyboard_mode = 0; /* FIXME */
+#endif
 
 unsigned char vidmem_old[4096];
 int refresh_screen=1;
@@ -239,7 +243,11 @@ void dontpanic(a)
     fclose(ramdisk);
   }
   fclose(cmtfile);
+#if defined(USE_RAWKEY)
   rawmode_exit();
+#else
+  keyboard_close();
+#endif
   vga_setmode(TEXT);
   exit(1);
 }
@@ -374,14 +382,14 @@ int main(argc,argv)
   screenon();
   vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
 
-#if 0
+#if defined(USE_RAWKEY)
   rawmode_init();
-
   set_switch_functions(screenoff,screenon);
   allow_switch(1);
-#endif
-
   for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
+#else
+  keyboard_init();
+#endif
 
   if(argc>=2 && strcmp(argv[1],"-c")==0) { /* "copy rom to ram" */ 
     memcpy(mem + RAM_START, mem + ROM_START, 4096);
@@ -509,7 +517,9 @@ int main(argc,argv)
 
   /* shouldn't get here, but... */
   if(audio_fd!=-1) close(audio_fd);
+#if defined(USE_RAWKEY)
   rawmode_exit();
+#endif
   vga_setmode(TEXT);
   exit(0);
 }
@@ -1123,27 +1133,37 @@ void toggle_blackwhite()
   update_palette();
 }
 
+#if defined(USE_RAWKEY)
+#else
+# define is_key_pressed keyboard_keypressed
+# define scan_keyboard keyboard_update
+#endif
+
 update_kybd()
 {
   int y;
 
+#if defined(USE_RAWKEY)
   for(y=0;y<5;y++) scan_keyboard();
+#else
+  keyboard_update();
+#endif
 
-  if(is_key_pressed(FUNC_KEY(10)))
+  if(is_key_pressed(SCANCODE_F10))
     {
-      while(is_key_pressed(FUNC_KEY(10))) { usleep(20000); scan_keyboard(); };
+      while(is_key_pressed(SCANCODE_F10)) { usleep(20000); scan_keyboard(); };
       dontpanic();	/* F10 = quit */
     }
 
-  if(is_key_pressed(FUNC_KEY(11)))
+  if(is_key_pressed(SCANCODE_F11))
     {
-      while(is_key_pressed(FUNC_KEY(11))) { usleep(20000); scan_keyboard(); };
+      while(is_key_pressed(SCANCODE_F11)) { usleep(20000); scan_keyboard(); };
       reset();	/* F11 = reset */
     }
 
-  if(is_key_pressed(FUNC_KEY(12)))
+  if(is_key_pressed(SCANCODE_F12))
     {
-      while(is_key_pressed(FUNC_KEY(12))) { usleep(20000); scan_keyboard(); };
+      while(is_key_pressed(SCANCODE_F12)) { usleep(20000); scan_keyboard(); };
       toggle_blackwhite(); 
     }
 
@@ -1153,277 +1173,96 @@ update_kybd()
    * of thing - it wasn't really intended to be used like this :-)
    */
 
-  switch (keyboard_mode) {
-  case 0: /* very MZ-ish mapping, hardly usable */
-    /* byte 0 */
-    if(is_key_pressed(ENTER_KEY))	keyports[0]|=0x01;
-    if(is_key_pressed(scancode['\'']))	keyports[0]|=0x02;	/* colon */
-    if(is_key_pressed(scancode[';']))	keyports[0]|=0x04;
-    if(is_key_pressed(TAB_KEY))		keyports[0]|=0x10;
-    if(is_key_pressed(scancode['#']))	keyports[0]|=0x20;	/*arrow/pound*/
-    if(is_key_pressed(PAGE_UP))		keyports[0]|=0x40;	/* graph */
-    if(is_key_pressed(scancode['`']))	keyports[0]|=0x40; /* (alternative) */
-    if(is_key_pressed(PAGE_DOWN))	keyports[0]|=0x80; /*blank key nr CR */
+  /* byte 0 */
+  if(is_key_pressed(SCANCODE_ENTER))	keyports[0]|=0x01;
+  if(is_key_pressed(SCANCODE_APOSTROPHE))	keyports[0]|=0x02;	/* colon */
+  if(is_key_pressed(SCANCODE_SEMICOLON))	keyports[0]|=0x04;
+  if(is_key_pressed(SCANCODE_TAB))		keyports[0]|=0x10;
+  /*  if(is_key_pressed(#))	keyports[0]|=0x20;*/	/*arrow/pound*/
+  if(is_key_pressed(SCANCODE_PAGEUP))		keyports[0]|=0x40;	/* graph */
+  if(is_key_pressed(SCANCODE_GRAVE))	keyports[0]|=0x40; /* (alternative) */
+  if(is_key_pressed(SCANCODE_PAGEDOWN))	keyports[0]|=0x80; /*blank key nr CR */
 
-    /* byte 1 */
-    if(is_key_pressed(scancode[']']))	keyports[1]|=0x08;
-    if(is_key_pressed(scancode['[']))	keyports[1]|=0x10;
-    if(is_key_pressed(FUNC_KEY(7)))		keyports[1]|=0x20;	/* @ */
-    if(is_key_pressed(scancode['z']))	keyports[1]|=0x40;
-    if(is_key_pressed(scancode['y']))	keyports[1]|=0x80;
+  /* byte 1 */
+  if(is_key_pressed(SCANCODE_BRACKET_RIGHT))	keyports[1]|=0x08;
+  if(is_key_pressed(SCANCODE_BRACKET_LEFT))	keyports[1]|=0x10;
+  if(is_key_pressed(SCANCODE_F7))		keyports[1]|=0x20;	/* @ */
+  if(is_key_pressed(SCANCODE_Z))	keyports[1]|=0x40;
+  if(is_key_pressed(SCANCODE_Y))	keyports[1]|=0x80;
 
-    /* byte 2 */
-    if(is_key_pressed(scancode['x']))	keyports[2]|=0x01;
-    if(is_key_pressed(scancode['w']))	keyports[2]|=0x02;
-    if(is_key_pressed(scancode['v']))	keyports[2]|=0x04;
-    if(is_key_pressed(scancode['u']))	keyports[2]|=0x08;
-    if(is_key_pressed(scancode['t']))	keyports[2]|=0x10;
-    if(is_key_pressed(scancode['s']))	keyports[2]|=0x20;
-    if(is_key_pressed(scancode['r']))	keyports[2]|=0x40;
-    if(is_key_pressed(scancode['q']))	keyports[2]|=0x80;
+  /* byte 2 */
+  if(is_key_pressed(SCANCODE_X))	keyports[2]|=0x01;
+  if(is_key_pressed(SCANCODE_W))	keyports[2]|=0x02;
+  if(is_key_pressed(SCANCODE_V))	keyports[2]|=0x04;
+  if(is_key_pressed(SCANCODE_U))	keyports[2]|=0x08;
+  if(is_key_pressed(SCANCODE_T))	keyports[2]|=0x10;
+  if(is_key_pressed(SCANCODE_S))	keyports[2]|=0x20;
+  if(is_key_pressed(SCANCODE_R))	keyports[2]|=0x40;
+  if(is_key_pressed(SCANCODE_Q))	keyports[2]|=0x80;
 
-    /* byte 3 */
-    if(is_key_pressed(scancode['p']))	keyports[3]|=0x01;
-    if(is_key_pressed(scancode['o']))	keyports[3]|=0x02;
-    if(is_key_pressed(scancode['n']))	keyports[3]|=0x04;
-    if(is_key_pressed(scancode['m']))	keyports[3]|=0x08;
-    if(is_key_pressed(scancode['l']))	keyports[3]|=0x10;
-    if(is_key_pressed(scancode['k']))	keyports[3]|=0x20;
-    if(is_key_pressed(scancode['j']))	keyports[3]|=0x40;
-    if(is_key_pressed(scancode['i']))	keyports[3]|=0x80;
+  /* byte 3 */
+  if(is_key_pressed(SCANCODE_P))	keyports[3]|=0x01;
+  if(is_key_pressed(SCANCODE_O))	keyports[3]|=0x02;
+  if(is_key_pressed(SCANCODE_N))	keyports[3]|=0x04;
+  if(is_key_pressed(SCANCODE_M))	keyports[3]|=0x08;
+  if(is_key_pressed(SCANCODE_L))	keyports[3]|=0x10;
+  if(is_key_pressed(SCANCODE_K))	keyports[3]|=0x20;
+  if(is_key_pressed(SCANCODE_J))	keyports[3]|=0x40;
+  if(is_key_pressed(SCANCODE_I))	keyports[3]|=0x80;
 
-    /* byte 4 */
-    if(is_key_pressed(scancode['h']))	keyports[4]|=0x01;
-    if(is_key_pressed(scancode['g']))	keyports[4]|=0x02;
-    if(is_key_pressed(scancode['f']))	keyports[4]|=0x04;
-    if(is_key_pressed(scancode['e']))	keyports[4]|=0x08;
-    if(is_key_pressed(scancode['d']))	keyports[4]|=0x10;
-    if(is_key_pressed(scancode['c']))	keyports[4]|=0x20;
-    if(is_key_pressed(scancode['b']))	keyports[4]|=0x40;
-    if(is_key_pressed(scancode['a']))	keyports[4]|=0x80;
+  /* byte 4 */
+  if(is_key_pressed(SCANCODE_H))	keyports[4]|=0x01;
+  if(is_key_pressed(SCANCODE_G))	keyports[4]|=0x02;
+  if(is_key_pressed(SCANCODE_F))	keyports[4]|=0x04;
+  if(is_key_pressed(SCANCODE_E))	keyports[4]|=0x08;
+  if(is_key_pressed(SCANCODE_D))	keyports[4]|=0x10;
+  if(is_key_pressed(SCANCODE_C))	keyports[4]|=0x20;
+  if(is_key_pressed(SCANCODE_B))	keyports[4]|=0x40;
+  if(is_key_pressed(SCANCODE_A))	keyports[4]|=0x80;
 
-    /* byte 5 */
-    if(is_key_pressed(scancode['8']))	keyports[5]|=0x01;
-    if(is_key_pressed(scancode['7']))	keyports[5]|=0x02;
-    if(is_key_pressed(scancode['6']))	keyports[5]|=0x04;
-    if(is_key_pressed(scancode['5']))	keyports[5]|=0x08;
-    if(is_key_pressed(scancode['4']))	keyports[5]|=0x10;
-    if(is_key_pressed(scancode['3']))	keyports[5]|=0x20;
-    if(is_key_pressed(scancode['2']))	keyports[5]|=0x40;
-    if(is_key_pressed(scancode['1']))	keyports[5]|=0x80;
+  /* byte 5 */
+  if(is_key_pressed(SCANCODE_8))	keyports[5]|=0x01;
+  if(is_key_pressed(SCANCODE_7))	keyports[5]|=0x02;
+  if(is_key_pressed(SCANCODE_6))	keyports[5]|=0x04;
+  if(is_key_pressed(SCANCODE_5))	keyports[5]|=0x08;
+  if(is_key_pressed(SCANCODE_4))	keyports[5]|=0x10;
+  if(is_key_pressed(SCANCODE_3))	keyports[5]|=0x20;
+  if(is_key_pressed(SCANCODE_2))	keyports[5]|=0x40;
+  if(is_key_pressed(SCANCODE_1))	keyports[5]|=0x80;
 
-    /* byte 6 */
-    if(is_key_pressed(scancode['.']))	keyports[6]|=0x01;
-    if(is_key_pressed(scancode[',']))	keyports[6]|=0x02;
-    if(is_key_pressed(scancode['9']))	keyports[6]|=0x04;
-    if(is_key_pressed(scancode['0']))	keyports[6]|=0x08;
-    if(is_key_pressed(scancode[' ']))	keyports[6]|=0x10;
-    if(is_key_pressed(scancode['-']))	keyports[6]|=0x20;
-    if(is_key_pressed(scancode['=']))	keyports[6]|=0x40; /* arrow/tilde */
-    if(is_key_pressed(scancode['\\']))	keyports[6]|=0x80;
+  /* byte 6 */
+  if(is_key_pressed(SCANCODE_PERIOD))	keyports[6]|=0x01;
+  if(is_key_pressed(SCANCODE_COMMA))	keyports[6]|=0x02;
+  if(is_key_pressed(SCANCODE_9))	keyports[6]|=0x04;
+  if(is_key_pressed(SCANCODE_0))	keyports[6]|=0x08;
+  if(is_key_pressed(SCANCODE_SPACE))	keyports[6]|=0x10;
+  if(is_key_pressed(SCANCODE_MINUS))	keyports[6]|=0x20;
+  if(is_key_pressed(SCANCODE_EQUAL))	keyports[6]|=0x40; /* arrow/tilde */
+  if(is_key_pressed(SCANCODE_BACKSLASH))	keyports[6]|=0x80;
 
-    /* byte 7 */
-    if(is_key_pressed(scancode['/']))	keyports[7]|=0x01;
-    if(is_key_pressed(FUNC_KEY(8)))		keyports[7]|=0x02;	/* ? */
-    if(is_key_pressed(CURSOR_LEFT))		keyports[7]|=0x04;
-    if(is_key_pressed(CURSOR_RIGHT))	keyports[7]|=0x08;
-    if(is_key_pressed(CURSOR_DOWN))		keyports[7]|=0x10;
-    if(is_key_pressed(CURSOR_UP))		keyports[7]|=0x20;
-    if(is_key_pressed(DELETE_KEY))		keyports[7]|=0x40;
-    if(is_key_pressed(INSERT_KEY))		keyports[7]|=0x80;
+  /* byte 7 */
+  if(is_key_pressed(SCANCODE_SLASH))	keyports[7]|=0x01;
+  if(is_key_pressed(SCANCODE_F8))		keyports[7]|=0x02;	/* ? */
+  if(is_key_pressed(SCANCODE_CURSORLEFT))		keyports[7]|=0x04;
+  if(is_key_pressed(SCANCODE_CURSORRIGHT))	keyports[7]|=0x08;
+  if(is_key_pressed(SCANCODE_CURSORDOWN))		keyports[7]|=0x10;
+  if(is_key_pressed(SCANCODE_CURSORUP))		keyports[7]|=0x20;
+  if(is_key_pressed(SCANCODE_REMOVE))		keyports[7]|=0x40;
+  if(is_key_pressed(SCANCODE_INSERT))		keyports[7]|=0x80;
 
-    /* byte 8 */
-    if(is_key_pressed(LEFT_SHIFT))		keyports[8]|=0x01;
-    if(is_key_pressed(RIGHT_SHIFT))		keyports[8]|=0x01;
-    if(is_key_pressed(LEFT_CTRL))		keyports[8]|=0x40;
-    if(is_key_pressed(BACKSPACE))		keyports[8]|=0x80;	/* break */
+  /* byte 8 */
+  if(is_key_pressed(SCANCODE_LEFTSHIFT))		keyports[8]|=0x01;
+  if(is_key_pressed(SCANCODE_RIGHTSHIFT))		keyports[8]|=0x01;
+  if(is_key_pressed(SCANCODE_LEFTCONTROL))		keyports[8]|=0x40;
+  if(is_key_pressed(SCANCODE_BACKSPACE))		keyports[8]|=0x80;	/* break */
 
-    /* byte 9 */
-    if(is_key_pressed(FUNC_KEY(5)))		keyports[9]|=0x08;
-    if(is_key_pressed(FUNC_KEY(4)))		keyports[9]|=0x10;
-    if(is_key_pressed(FUNC_KEY(3)))		keyports[9]|=0x20;
-    if(is_key_pressed(FUNC_KEY(2)))		keyports[9]|=0x40;
-    if(is_key_pressed(FUNC_KEY(1)))		keyports[9]|=0x80;
-    break;
+  /* byte 9 */
+  if(is_key_pressed(SCANCODE_F5))		keyports[9]|=0x08;
+  if(is_key_pressed(SCANCODE_F4))		keyports[9]|=0x10;
+  if(is_key_pressed(SCANCODE_F3))		keyports[9]|=0x20;
+  if(is_key_pressed(SCANCODE_F2))		keyports[9]|=0x40;
+  if(is_key_pressed(SCANCODE_F1))		keyports[9]|=0x80;
 
-  case 2: { /* German hack */
-    
-    /* byte 8 */
-    if(is_key_pressed(LEFT_SHIFT))		keyports[8]|=0x01;
-    if(is_key_pressed(RIGHT_SHIFT))		keyports[8]|=0x01;
-    if(is_key_pressed(LEFT_CTRL))		keyports[8]|=0x40;
-    if(is_key_pressed(BACKSPACE))		keyports[8]|=0x80;	/* break */
-
-    if(is_key_pressed(CURSOR_LEFT))		keyports[7]|=0x04;
-    if(is_key_pressed(CURSOR_RIGHT))	        keyports[7]|=0x08;
-    if(is_key_pressed(CURSOR_DOWN))		keyports[7]|=0x10;
-    if(is_key_pressed(CURSOR_UP))		keyports[7]|=0x20;
-    if(is_key_pressed(DELETE_KEY))		keyports[7]|=0x40;
-    if(is_key_pressed(INSERT_KEY))		keyports[7]|=0x80;
-
-    if(is_key_pressed(FUNC_KEY(5)))		keyports[9]|=0x08;
-    if(is_key_pressed(FUNC_KEY(4)))		keyports[9]|=0x10;
-    if(is_key_pressed(FUNC_KEY(3)))		keyports[9]|=0x20;
-    if(is_key_pressed(FUNC_KEY(2)))		keyports[9]|=0x40;
-    if(is_key_pressed(FUNC_KEY(1)))		keyports[9]|=0x80;
-
-    /* first row */
-
-    if(is_key_pressed(scancode['`'])) {
-      if (keyports[8] & 1) { /* Shift+` */
-      }
-      else keyports[6]|=0x40; /* ^ */
-    }
-    if(is_key_pressed(scancode['8'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+8 is [ */
-	keyports[1]|=0x10;
-      }
-      else keyports[5]|=0x01;
-    }
-    if(is_key_pressed(scancode['7'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+7 is { */
-	keyports[1]|=0x10;
-	keyports[8]|=1;
-      } else if (keyports[8] & 1) { /* Shift 7 is / */ 
-	keyports[7]|=0x01;
-	keyports[8]&=~1;
-      }
-      else keyports[5]|=0x02;
-    }
-    if(is_key_pressed(scancode['6']))	keyports[5]|=0x04;
-    if(is_key_pressed(scancode['5']))	keyports[5]|=0x08;
-    if(is_key_pressed(scancode['4']))	keyports[5]|=0x10;
-    if(is_key_pressed(scancode['3']))	keyports[5]|=0x20;
-    if(is_key_pressed(scancode['2']))	keyports[5]|=0x40;
-    if(is_key_pressed(scancode['1']))	keyports[5]|=0x80;
-
-    if(is_key_pressed(scancode['9'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+9 is ] */
-	keyports[1]|=0x08;
-      }
-      else keyports[6]|=0x04; 
-    }
-    
-    if (is_key_pressed(scancode['0'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+0 is } */
-	keyports[1]|=0x08;
-	keyports[8]|=1;
-      }
-      else if (keyports[8] & 1) { /* Shift+0 is = */
-	keyports[6]|=0x20;
-	keyports[8]|=1;
-      }
-      else keyports[6]|=0x08; 
-    }
-
-    if(is_key_pressed(scancode['-'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+- is \ */
-	keyports[6]|=0x80;
-      }
-      else if (keyports[8] & 1) { /* Shift+- is ? */
-	keyports[7]|=0x02;	
-	keyports[8]&=~1;
-      }
-      else { /* sz */
-	keyports[1]|=0x10;
-	keyports[8]|=1;
-      }
-    }
-
-    /* letter keys */
-
-    if(is_key_pressed(scancode['x']))	keyports[2]|=0x01;
-    if(is_key_pressed(scancode['w']))	keyports[2]|=0x02;
-    if(is_key_pressed(scancode['v']))	keyports[2]|=0x04;
-    if(is_key_pressed(scancode['u']))	keyports[2]|=0x08;
-    if(is_key_pressed(scancode['t']))	keyports[2]|=0x10;
-    if(is_key_pressed(scancode['s']))	keyports[2]|=0x20;
-    if(is_key_pressed(scancode['r']))	keyports[2]|=0x40;
-    if(is_key_pressed(scancode['q'])) {
-      if (is_key_pressed(LEFT_ALT)) {
-	keyports[1]|=0x20; /* Alt+Q is @ */
-      }
-      else keyports[2]|=0x80;
-    }
-    if(is_key_pressed(scancode['p']))	keyports[3]|=0x01;
-    if(is_key_pressed(scancode['o']))	keyports[3]|=0x02;
-    if(is_key_pressed(scancode['n']))	keyports[3]|=0x04;
-    if(is_key_pressed(scancode['m']))	keyports[3]|=0x08;
-    if(is_key_pressed(scancode['l']))	keyports[3]|=0x10;
-    if(is_key_pressed(scancode['k']))	keyports[3]|=0x20;
-    if(is_key_pressed(scancode['j']))	keyports[3]|=0x40;
-    if(is_key_pressed(scancode['i']))	keyports[3]|=0x80;
-    if(is_key_pressed(scancode['h']))	keyports[4]|=0x01;
-    if(is_key_pressed(scancode['g']))	keyports[4]|=0x02;
-    if(is_key_pressed(scancode['f']))	keyports[4]|=0x04;
-    if(is_key_pressed(scancode['e']))	keyports[4]|=0x08;
-    if(is_key_pressed(scancode['d']))	keyports[4]|=0x10;
-    if(is_key_pressed(scancode['c']))	keyports[4]|=0x20;
-    if(is_key_pressed(scancode['b']))	keyports[4]|=0x40;
-    if(is_key_pressed(scancode['a']))	keyports[4]|=0x80;
-    if(is_key_pressed(scancode['y']))	keyports[1]|=0x40;
-    if(is_key_pressed(scancode['z']))	keyports[1]|=0x80;
-
-    /* lowest row */
-
-    if(is_key_pressed(scancode['.'])) {
-      if (keyports[8] & 1) { /* Shift+. is : */
-	keyports[0]|=0x02;
-	keyports[8]&=~1;
-      }
-      else keyports[6]|=0x01;
-    }
-    if(is_key_pressed(scancode[','])) {
-      if (keyports[8] & 1) { /* Shift+, is ; */
-	keyports[0]|=0x04;
-	keyports[8]&=~1;
-      }
-      else keyports[6]|=0x02;
-    }
-    if(is_key_pressed(scancode['/'])) {
-      if (keyports[8] & 1) { /* Shift+- is _ */
-      }
-      else keyports[6]|=0x20; /* - */
-    }
-
-    /* special keys */
-
-    if(is_key_pressed(ENTER_KEY))	keyports[0]|=0x01;
-    if(is_key_pressed(LEFT_ALT))	keyports[0]|=0x10;      /* alpha */
-    if(is_key_pressed(TAB_KEY))         keyports[0]|=0x08;
-    
-#if 0
-
-    /* byte 0 */
-    if(is_key_pressed(scancode['\'']))	keyports[0]|=0x02;	/* colon */
-    if(is_key_pressed(scancode[';']))	keyports[0]|=0x04;
-    if(is_key_pressed(scancode['#']))	keyports[0]|=0x20;	/*arrow/pound*/
-    if(is_key_pressed(scancode[';']))	keyports[0]|=0x80; /* blank key nr CR = Oe */
-
-    /* byte 1 */
-    if(is_key_pressed(scancode[']']))	keyports[1]|=0x08;
-    if(is_key_pressed(scancode['[']))	keyports[1]|=0x10;
-
-    /* byte 2 */
-
-    /* byte 5 */
-
-    /* byte 6 */
-    if(is_key_pressed(scancode[' ']))	keyports[6]|=0x10;
-    if(is_key_pressed(scancode['`']) && !(keyports[8] & 1)) keyports[6]|=0x40; /* arrow/tilde */
-
-    /* byte 7 */
-    if(is_key_pressed(scancode['7']) && (keyports[8] & 1)) { /* / */
-      keyports[7]|=0x01;
-      keyports[8]|=1;
-    }
-
-#endif
-
-
-  }
-    break;
-  }
   /* now invert */
   for(y=0;y<10;y++) keyports[y]^=255;
 }
