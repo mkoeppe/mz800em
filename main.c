@@ -49,6 +49,9 @@
 #include "z80.h"
 #include "mz700em.h"
 #include "graphics.h"
+#ifdef USE_MZ80
+#  include "mz80/mz80.h"
+#endif
 
 #ifdef ALLOW_LPT_ACCESS
 #  define LPTPORT 0x378
@@ -91,6 +94,7 @@ int ints_per_second = 50;
 #endif
 int countsec=0;
 int bs_inhibit=0;
+int bsmode=BSM_PLAIN;
 int ramdisk_addr;
 char PortD9;
 int pb_select=0;	/* selected kport to read */
@@ -121,7 +125,11 @@ int lastfreq=0;			/* last value written to above in prev frame */
 int do_sound=0;
 int audio_fd=-1;
 
+#if defined(REAL_TIMER)
 int RealTimer = 0;
+#else
+#define RealTimer 0
+#endif
 
 int screen_dirty;
 int hsize=480,vsize=64;
@@ -146,10 +154,6 @@ int refresh_screen=1;
 FILE *imagefile;
 /*FILE *portfile;*/
 
-#ifdef ALLOW_LPT_ACCESS
-int funny_lpt_loopback = 0;
-#endif
-
 FILE *printerfile = 0;
 
 int batch = 0;
@@ -161,11 +165,18 @@ extern int VirtualDiskIsDir[4];
 int pending_timer_interrupts;
 int pending_vbln_interrupts;
 
+#if defined(USE_MZ80) && defined(TWO_Z80_COPIES)
+   extern UINT32 mz80cyclesRemaining, mz80fcyclesRemaining;
+#  define SET_INTERRUPTED(a) mz80cyclesRemaining = mz80fcyclesRemaining = 0, interrupted = a
+#else
+#  define SET_INTERRUPTED(a) interrupted = a
+#endif
+
 /* handle timer interrupt */
 void sighandler(a)
      int a;
 {
-  if(interrupted<2) interrupted=1;
+  if(interrupted<2) SET_INTERRUPTED(1);
 
   /* This timer control is not very accurate but it works quite well */
 
@@ -195,7 +206,7 @@ void sighandler(a)
 	      int additional_timer_interrupts = 15600 / (cont1 * cont2 * ints_per_second) - 1;
 	      if (additional_timer_interrupts > 0)
 		pending_timer_interrupts += additional_timer_interrupts;
-	      interrupted = 4; /* cause timer interrupt */
+	      SET_INTERRUPTED( 4); /* cause timer interrupt */
 	    }
 	    timesec=cont2 /*0xa8c0*/;	/* 12 hrs in secs */
 	  }
@@ -212,7 +223,7 @@ void sighandler(a)
        timing (SN76489 control) and by a few games */
     /* FIXME: We actually should use the CONT0 value to
        determine how often to throw an interrupt. */
-    interrupted = 4;
+    SET_INTERRUPTED( 4);
     intvec = Z80PIOVec[0];
   }
 
@@ -223,7 +234,7 @@ void sighandler(a)
       pending_vbln_interrupts++;
     }
     else {
-      interrupted = 4;
+      SET_INTERRUPTED( 4);
       intvec = Z80PIOVec[0];
     }
   }
@@ -235,23 +246,25 @@ void pending_interrupts_hack()
   /* This is called directly after RETI */
   if (pending_timer_interrupts) {
     pending_timer_interrupts--;
-    interrupted = 4;
+    SET_INTERRUPTED( 4);
     intvec = 0;
   } 
   else if (pending_vbln_interrupts) {
     pending_vbln_interrupts--;
-    interrupted = 4;
+    SET_INTERRUPTED( 4);
     intvec = Z80PIOVec[0];
   }
 }
 
+#ifdef REAL_TIMER
 /* handle emulated 8253 timer interrupt */
 void sig8253handler(a)
      int a;
 {
-  if (timer_interrupt) interrupted = 4;
-  else interrupted = 1;
+  if (timer_interrupt) SET_INTERRUPTED( 4);
+  else SET_INTERRUPTED( 1);
 }
+#endif
 
 /* handle exit signals */
 void dontpanic(a)
@@ -298,7 +311,9 @@ void screenon()
   }
   else {
     vptr = malloc(256*1024);
+#if !defined(__CYGWIN__) && !defined(VGA16)
     directvideo = 1;
+#endif
   }
 }
 
@@ -312,18 +327,6 @@ void screenoff()
 
 void dummy()
 {}
-
-#if defined(ALLOW_LPT_ACCESS)
-void outportb(int port, char a)
-{
-  outb(a, port);
-}
-
-char inportb(int port)
-{
-  return inb(port);
-}
-#endif
 
 #ifdef REAL_TIMER
 void set8253timer()
@@ -378,13 +381,6 @@ int main(argc,argv)
     argv+=2, argc-=2;
   }
 
-#ifdef ALLOW_LPT_ACCESS
-  if(argc>=2 && strcmp(argv[1],"-l")==0) { /* "funny lpt loopback" */ 
-    funny_lpt_loopback = 1;
-    argv+=1, argc-=1;
-  }
-#endif
-
   loadrom(mem);
   /* adjust ROM entry point */
 
@@ -415,9 +411,12 @@ int main(argc,argv)
   /*  portfile = fopen("/dev/port", "rw"); */ /* only for printer port hack */
 
 #ifdef linux
-#ifdef ALLOW_LPT_ACCESS
+#  ifdef ALLOW_LPT_ACCESS
   ioperm(LPTPORT, 3, 1); /* allow LPT port access */
-#endif
+#  endif
+#  if defined(VGA16)
+  ioperm(0x3c0, 16, 1); /* allow VGA port access */
+#  endif
 #endif
 
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
@@ -706,11 +705,6 @@ void reset()
   init_scroll();
 }
 
-/* bank-switch modes */
-#define BSM_PLAIN 0
-#define BSM_MMIO 1
-#define BSM_GRAPHICS 2
-
 #ifdef COPY_BANKSWITCH
 
 void bankswitch(int block, unsigned char *address, int attr)
@@ -730,10 +724,14 @@ void bankswitch(int block, unsigned char *address, int attr)
 
 #  ifdef USE_MZ80
      extern void bankswitchmode(int mode);
-#    define BANKSWITCHMODE(mode) bankswitchmode(mode)
-#    define BANKSWITCHALT(block, addr, attr) (void)0
+#    define BANKSWITCHMODE(mode) bsmode = mode, bankswitchmode(mode)
+#    define BANKSWITCHALT(block, addr, attr) memattr[block]=attr
 #  else
-#    define BANKSWITCHMODE(mode) (void)0
+#    ifdef TWO_Z80_COPIES
+#      define BANKSWITCHMODE(mode) bsmode = mode, interrupted = 77
+#    else
+#      define BANKSWITCHMODE(mode) (void)0
+#    endif
 #    define BANKSWITCHALT(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
 #  endif
 #else
@@ -824,30 +822,18 @@ unsigned int in(h,l)
   case 0xfe: /* printer status */
     {
 #ifdef ALLOW_LPT_ACCESS
-      if (funny_lpt_loopback) {
-	char s = inportb(LPTPORT);
-	char t = 0;
-	if (!(s & 0x10)) t|=2;
-	if ((s & 0x04)) t|=1;
-	return ts|t;
-      }
-      else {
-	char s = inportb(LPTPORT+1);
-	char t = 0;
-	if (!(s & 0x80)) t|=1;
-	if ((s & 0x20)) t|=2;
-	return ts|t;
-      }
+      char s = inb(LPTPORT+1);
+      char t = 0;
+      if (!(s & 0x80)) t|=1;
+      if ((s & 0x20)) t|=2;
+      return ts|t;
 #else
       return ts;
 #endif
     }
   case 0xff: /* Printer data */
 #ifdef ALLOW_LPT_ACCESS
-    if (funny_lpt_loopback) {
-      return ts | (inportb(LPTPORT+1) >> 3);
-    }
-    else return ts | inportb(LPTPORT);
+    return ts | inb(LPTPORT);
 #else
     return ts;
 #endif
@@ -1072,10 +1058,7 @@ unsigned int out(h,l,a)
 
     case 0xff: /* Printer data */
 #ifdef ALLOW_LPT_ACCESS
-      if (funny_lpt_loopback) {
-	outportb(LPTPORT+1, a << 3);
-      }
-      else outportb(LPTPORT, a);
+      outb(a, LPTPORT);
 #endif
       return ts;
     }
@@ -1312,7 +1295,7 @@ update_kybd()
   if(is_key_pressed(SCANCODE_F11))
     {
       while(is_key_pressed(SCANCODE_F11)) { usleep(20000); scan_keyboard(); };
-      interrupted = 2;	/* F11 = reset */
+      SET_INTERRUPTED( 2);	/* F11 = reset */
     }
 
   if(is_key_pressed(SCANCODE_F12))
@@ -1454,7 +1437,7 @@ do_interrupt()
     handle_messages();
 #endif
   }
-  if(interrupted<2) interrupted=0;
+  if(interrupted<2) interrupted = 0;
 }
 
 
@@ -1618,5 +1601,5 @@ playsound()
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
 
   /* this runs instead of alarm int, so... */
-  if(interrupted<2) interrupted=1;
+  if(interrupted<2) SET_INTERRUPTED(1);
 }
