@@ -100,138 +100,184 @@ word16 _hlixiy[3];
 
 mainloop(unsigned short initial_pc, unsigned short initial_sp)
 {
-unsigned char r, a1, f1, b1, c1, d1, e1, h1, l1, i, iff1, iff2, im;
+  unsigned char r, a1, f1, b1, c1, d1, e1, h1, l1, i, iff1, iff2, im;
 #ifndef USE_REGS
   unsigned short pc;
   unsigned char a, f;
   unsigned char b, c, d, e, h, l;
   unsigned short ix, iy;
 #endif
-unsigned short sp;
+  unsigned short sp;
 #ifndef NO_COUNT_TSTATES
-extern unsigned long tstates,tsmax;
+  extern unsigned long tstates,tsmax;
 #  define INC_TSTATES(x) (tstates+=(x))
 #else
 #  define INC_TSTATES(x) ((void)(x))
-/* must eval x due to side effects */ 
+  /* must eval x due to side effects */ 
 #endif
-unsigned int radjust;
-unsigned char ixoriy, new_ixoriy;
-unsigned char intsample;
-unsigned char op;
+  unsigned int radjust;
+  unsigned char ixoriy, new_ixoriy;
+  unsigned char intsample;
+  unsigned char op;
 #if 0
-int count;
+  int count;
 #endif
 
-a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
-ixoriy=new_ixoriy=0;
-ix=iy=sp=pc=0;
+  a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
+  ixoriy=new_ixoriy=0;
+  ix=iy=sp=pc=0;
 #ifdef USE_REGS
-pc_ = 0;
+  pc_ = 0;
 #endif
-pc = initial_pc;
-sp = initial_sp;
+  pc = initial_pc;
+  sp = initial_sp;
 #ifndef NO_COUNT_TSTATES
-tstates=0;
+  tstates=0;
 #endif
-radjust = 0;
-while(1)
-  {
+  radjust = 0;
+#ifdef TWO_Z80_COPIES  
+  while (1) {
+    if (bsmode != BSM_PLAIN) {
+#endif
+      while(1) {
 #ifndef NO_COUNT_TSTATES
-  /* moved here as reqd by 'halt' support in z80ops.c */
-  if(tstates>tsmax)
-    fix_tstates();
+	/* moved here as reqd by 'halt' support in z80ops.c */
+	if(tstates>tsmax)
+	  fix_tstates();
 #endif
-#if 0
-  count++;
-#endif
-  ixoriy=new_ixoriy;
-  new_ixoriy=0;
-  intsample=1;
-  op=fetchpc;
-  pc++;
+	ixoriy=new_ixoriy;
+	new_ixoriy=0;
+	intsample=1;
+	op=fetchpc;
+	pc++;
 #ifndef NO_COUNT_TSTATES
-  radjust++;
+	radjust++;
 #endif
-  switch(op)
-    {
+	switch(op) {
 #include "z80ops.c"
-    }
-
-  if(interrupted)
-    {
+	}
+      
+	if(interrupted) {
 #ifndef NO_COUNT_TSTATES
-    tstates=0;
+	  tstates=0;
 #endif
-    if(interrupted==1 || interrupted==4)
-      do_interrupt();	/* does the screen update & keyboard reading */
+#ifdef TWO_Z80_COPIES
+	  if (interrupted == 77) {
+	    interrupted = 0; 
+	    break;
+	  }
+#endif
+	  if(interrupted==1 || interrupted==4)
+	    do_interrupt();    /* does the screen update & keyboard reading */
     
-    if(interrupted==2)
-      {
-      /* actually a kludge to let us do a reset */
-      a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
-      ixoriy=new_ixoriy=0;
-      ix=iy=sp=pc=0;
+	  if(interrupted==2) {
+	    /* actually a kludge to let us do a reset */
+	    a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
+	    ixoriy=new_ixoriy=0;
+	    ix=iy=sp=pc=0;
 #ifndef NO_COUNT_TSTATES
-      tstates=radjust=0;
+	    tstates=radjust=0;
 #endif
+	    reset();
+	  }
+    
+	  if(!intsample) {
+	    /* this makes sure we don't interrupt a dd/fd/etc. prefix op.
+	     * we make interrupted non-zero but bigger than one so that
+	     * we don't redraw screen etc. next time but *do* do int if
+	     * enabled.
+	     */
+	    interrupted++;
+	    continue;
+	  }
+    
+	  if (interrupted >= 4) {
+	    if(iff1) {
+	      if(fetchpc==0x76)pc++;
+	      iff1=iff2=0;
+	      INC_TSTATES(5); /* accompanied by an input from the data bus */
+	      switch(im){
+	      case 0: /* IM 0 */
+	      case 1: /* undocumented */
+	      case 2: /* IM 1 */
+		/* there is little to distinguish between these cases */
+		INC_TSTATES(7); /* perhaps */
+		push2(pc);
+		pc=0x38;
+		break;
+	      case 3: /* IM 2 */
+		INC_TSTATES(13); /* perhaps */
+		{
+		  int addr=load2((i<<8)| intvec ); 
+		  intvec = 0xfe; /* MK: was 0xff */
+		  push2(pc);
+		  pc=addr;
+		}
+	      }
+	    }
+	  }
+	  interrupted=0;
+
+	}
       }
-    
-    if(!intsample)
-      {
-      /* this makes sure we don't interrupt a dd/fd/etc. prefix op.
-       * we make interrupted non-zero but bigger than one so that
-       * we don't redraw screen etc. next time but *do* do int if
-       * enabled.
-       */
-      interrupted++;
-      continue;
-      }
-    
-    /* the int itself is only used once every 12 hours (!) so
-     * don't bother with it for now, at least.
-     */
-    
-#if 1
-    if (interrupted >= 4) {
-      if(iff1) {
-	if(fetchpc==0x76)pc++;
-	iff1=iff2=0;
-	INC_TSTATES(5); /* accompanied by an input from the data bus */
-	switch(im){
-        case 0: /* IM 0 */
-        case 1: /* undocumented */
-        case 2: /* IM 1 */
-          /* there is little to distinguish between these cases */
-          INC_TSTATES(7); /* perhaps */
-          push2(pc);
-          pc=0x38;
-          break;
-        case 3: /* IM 2 */
-          INC_TSTATES(13); /* perhaps */
-          {
-	    int addr=load2((i<<8)| intvec ); 
-	    intvec = 0xfe; /* MK: was 0xff */
-	    push2(pc);
-	    pc=addr;
-          }
-        }
+
+#ifdef TWO_Z80_COPIES
+    }
+    else { /* in BSM_PLAIN using very fast CPU without memory hooks */
+#     undef load
+#     undef load2
+#     undef fetch
+#     undef fetch2
+#     undef store
+#     undef store2
+#     undef store2b
+#     define load(x) (visiblemem[x])
+#     define load2(x) (*((unsigned short *)(visiblemem+(x))))
+#     define fetch(x) (visiblemem[x])
+#     define fetch2(x) (*((unsigned short *)(visiblemem+(x))))
+#     define store(x,y) ((void)(visiblemem[x]=(y)))
+#     define store2(x,y) ((void)(*((unsigned short *)(visiblemem+x))=y))
+#     define store2b(x,hi,lo) store2(x, ((hi)<<8) | (lo))
+      while(1) {
+	ixoriy=new_ixoriy; new_ixoriy=0; intsample=1;
+	op=fetchpc; pc++;
+	switch(op) {
+#  include "z80ops.c"
+	}
+	if(interrupted) {
+	  if (interrupted == 77) {
+	    interrupted = 0;
+	    break;
+	  }
+	  if(interrupted==1 || interrupted==4) do_interrupt();    
+	  if(interrupted==2) {
+	    a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
+	    ixoriy=new_ixoriy=0;
+	    ix=iy=sp=pc=0;
+	    reset();
+	  }
+	  if(!intsample) {
+	    interrupted++;
+	    continue;
+	  }
+	  if (interrupted >= 4) {
+	    if(iff1) {
+	      if(fetchpc==0x76)pc++;
+	      iff1=iff2=0;
+	      switch(im){
+	      case 0: case 1: case 2: 
+		push2(pc); pc=0x38; break;
+	      case 3: {
+		int addr=load2((i<<8)| intvec ); 
+		intvec = 0xfe; push2(pc); pc=addr;
+	      }
+	      }
+	    }
+	  }
+	  interrupted=0;
+	}
       }
     }
+  } /* while (1) */
 #endif
-    interrupted=0;
-  
-
-    }
-  }
 }
-
-
-#if 0
-z80reset()
-{
-a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
-ix=iy=sp=pc=0;
-radjust=0;
-}
-#endif

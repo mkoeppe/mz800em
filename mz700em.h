@@ -12,6 +12,11 @@
 
 extern unsigned char mem[];
 
+/* bank-switch modes */
+#define BSM_PLAIN 0
+#define BSM_MMIO 1
+#define BSM_GRAPHICS 2
+
 /* keyboard */
 #define CODERINGSIZE 16
 extern int codering[CODERINGSIZE];
@@ -24,3 +29,4 @@ extern unsigned char key_state[128];
 extern int batch;
 extern int refresh_screen;
 extern int retrace;
+extern int bsmode;

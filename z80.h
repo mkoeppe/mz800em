@@ -50,6 +50,7 @@ extern int do_interrupt();
 extern int mainloop(unsigned short initial_pc, unsigned short initial_sp);
 extern int fix_tstates();
 extern void pending_interrupts_hack();
+extern void reset();
 
 #ifdef COPY_BANKSWITCH
 
