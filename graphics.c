@@ -68,6 +68,7 @@ void update_DMD(int a)
 }
 
 static unsigned char writecolorplanes;
+static unsigned char resetcolorplanes;
 static int writeplaneb;
 static unsigned char *writeptr;
 
@@ -76,21 +77,27 @@ void update_WF(int a)
   WF = a;
   if (DMD & 2) { /* 320x200x16 or 640x200x4 */
     writeplaneb = 0;
-    if (DMD & 4) /* 640 */ writecolorplanes = (WF&1) | ((WF>>1)&2);
-    else /* 320 */ writecolorplanes = WF & 0x0F;
+    if (DMD & 4) /* 640 */ writecolorplanes = (WF&1) | ((WF>>1)&2), 
+			     resetcolorplanes = ~3;
+    else /* 320 */ writecolorplanes = WF & 0x0F,
+		     resetcolorplanes = ~0x0F;
   }
   else { /* 320x200x4 or 640x200x2 */
     if (WF & 0x80) { /* REPLACE or PSET */
       writeplaneb = WF & 0x10; /* use A/B flag */
       writecolorplanes = writeplaneb ? WF>>2 : WF;
-      if (DMD & 4) /* 640 */ writecolorplanes &= 1;
-      else /* 320 */ writecolorplanes &= 3;
+      if (DMD & 4) /* 640 */ writecolorplanes &= 1,
+			       resetcolorplanes = ~1;
+      else /* 320 */ writecolorplanes &= 3,
+		       resetcolorplanes = ~3;
     }
     else { /* Single, XOR, OR, or RESET */
       writeplaneb = WF & 0x0C; /* Ignore A/B flag */
       writecolorplanes = writeplaneb ? (WF>>2)&3 : WF&3;
+      resetcolorplanes = ~3;
     }
   }
+  resetcolorplanes |= writecolorplanes;
 
   if (directvideo) {
     if (writeplaneb) /* plane B */
@@ -119,7 +126,7 @@ void graphics_write(int addr, int value)
   case 0: /* Single write -- write to addressed planes */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
       if (value & 1) *pptr |= writecolorplanes;
-      else *pptr &=~ writecolorplanes;
+      else *pptr &=~ resetcolorplanes;
     break;
   case 1: /* XOR */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
@@ -131,7 +138,7 @@ void graphics_write(int addr, int value)
     break;
   case 3: /* RESET */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr &=~ writecolorplanes;
+      if (value & 1) *pptr &=~ resetcolorplanes;
     break;
   case 4: /* REPLACE */
   case 5:
