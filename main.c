@@ -52,7 +52,9 @@
 #include "mz700em.h"
 #include "graphics.h"
 
-#define LPTPORT 0x378
+#ifdef ALLOW_LPT_ACCESS
+#  define LPTPORT 0x378
+#endif
 
 /* memory layout described in "mz700em.h" */
 unsigned char mem[MEM_END];
@@ -378,7 +380,9 @@ int main(argc,argv)
   /*  portfile = fopen("/dev/port", "rw"); */ /* only for printer port hack */
 
 #ifdef linux
+#ifdef ALLOW_LPT_ACCESS
   ioperm(LPTPORT, 3, 1); /* allow LPT port access */
+#endif
 #endif
 
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
@@ -725,6 +729,7 @@ unsigned int in(h,l)
 
   case 0xfe: /* printer status */
     {
+#ifdef ALLOW_LPT_ACCESS
       if (funny_lpt_loopback) {
 	char s = inportb(LPTPORT);
 	char t = 0;
@@ -739,12 +744,19 @@ unsigned int in(h,l)
 	if ((s & 0x20)) t|=2;
 	return ts|t;
       }
+#else
+      return ts;
+#endif
     }
   case 0xff: /* Printer data */
+#ifdef ALLOW_LPT_ACCESS
     if (funny_lpt_loopback) {
       return ts | (inportb(LPTPORT+1) >> 3);
     }
     else return ts | inportb(LPTPORT);
+#else
+    return ts;
+#endif
   }
 
 #if 0
@@ -958,10 +970,12 @@ unsigned int out(h,l,a)
       /* FE/FF is Z80PIO Data */
 
     case 0xff: /* Printer data */
+#ifdef ALLOW_LPT_ACCESS
       if (funny_lpt_loopback) {
 	outportb(LPTPORT+1, a << 3);
       }
       else outportb(LPTPORT, a);
+#endif
       return ts;
     }
 
