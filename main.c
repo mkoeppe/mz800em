@@ -2,7 +2,7 @@
  *
  * Z80 emulator (xz80) copyright (C) 1994 Ian Collier.
  * mz700em changes (C) 1996 Russell Marks.
- * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@mail.math.uni-magdeburg.de>
+ * mz800em changes are copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,80 +22,61 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vga.h>
+#include <vgakeyboard.h>
+#if defined(USE_RAWKEY)
+#  include <rawkey.h>
+#endif
 #include <time.h>
 #ifdef linux
-#  define unixish
-#  include <signal.h>
-#  include <vga.h>
-#  include <vgakeyboard.h>
-#  if defined(USE_RAWKEY)
-#    include <rawkey.h>
-#  endif
 #  include <sys/stat.h>
 #  include <sys/soundcard.h>
 #  include <asm/io.h>  /* for LPT hack */
-#  include <sys/ioctl.h>
 #endif
-#ifdef __CYGWIN__
-#  define unixish
-#  include <signal.h>
-#  include "mz800win.h"
+#ifdef __DJGPP__
+#  include <sys/stat.h>
+#  include "scancode.h"
+#  define SA_RESTART 0
+#  define SA_ONESHOT 0
 #endif
-
 #include "z80.h"
 #include "mz700em.h"
 #include "graphics.h"
-#ifdef USE_MZ80
-#  include "mz80/mz80.h"
-#endif
 
-#ifdef ALLOW_LPT_ACCESS
-#  define LPTPORT 0x378
-#endif
+#define LPTPORT 0x378
 
 /* memory layout described in "mz700em.h" */
 unsigned char mem[MEM_END];
 
 /* boots with ROM,ram,vram,mmI/O */
-/* but we begin with an all-RAM configuration 
-   and switch to the boot configuration using bankswitching ports. */
 unsigned char *memptr[16]=
 {
-  mem+RAM_START,	mem+RAM_START+0x1000,		/* 0000-1FFF */
+  mem+ROM_START,	mem+RAM_START+0x1000,		/* 0000-1FFF */
   mem+RAM_START+0x2000,	mem+RAM_START+0x3000,		/* 2000-3FFF */
   mem+RAM_START+0x4000,	mem+RAM_START+0x5000,		/* 4000-5FFF */
   mem+RAM_START+0x6000,	mem+RAM_START+0x7000,		/* 6000-7FFF */
   mem+RAM_START+0x8000,	mem+RAM_START+0x9000,		/* 8000-9FFF */
   mem+RAM_START+0xA000,	mem+RAM_START+0xB000,		/* A000-BFFF */
-  mem+RAM_START+0xC000,	mem+RAM_START+0xD000,		/* C000-DFFF */
-  mem+RAM_START+0xE000, mem+RAM_START+0xF000            /* E000-FFFF */
+  mem+RAM_START+0xC000,	mem+VID_START,			/* C000-DFFF */
+  mem+ROM800_START,     mem+ROM800_START+0x1000         /* E000-FFFF */
 };
 
-#ifdef COPY_BANKSWITCH
-unsigned char *visiblemem = mem + RAM_START;
-#endif
-
-/* first 4k and last 8k is ROM, but the rest is writeable */
+/* first 4k and last 4k is ROM, but the rest is writeable */
 /* 2 means it's memory-mapped I/O. The first bytes at E000 are memory-mapped I/O;
    the rest is ROM */
-int memattr[16]={1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1};
+int memattr[16]={0,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,2,0};
 
 unsigned long tstates=0;
 unsigned long tsmax=70000L;
-#ifdef __CYGWIN__
-/* Timer resolution is very low */
-int ints_per_second = 20;
-#else
 int ints_per_second = 50;
-#endif
 int countsec=0;
 int bs_inhibit=0;
-int bsmode=BSM_PLAIN;
 int ramdisk_addr;
 char PortD9;
 int pb_select=0;	/* selected kport to read */
@@ -112,7 +93,7 @@ int Z80PIOIntEnabled[2];
 
 char **cmtlist;
 int cmtcount, cmtcur;
-FILE *cmtfile = 0;
+FILE *cmtfile;
 
 int e007hi=0;		/* whether to read hi or lo from e007-ish addrs */
 int retrace=1;		/* 1 when should say retrace is in effect */
@@ -126,14 +107,13 @@ int lastfreq=0;			/* last value written to above in prev frame */
 int do_sound=0;
 int audio_fd=-1;
 
-#if defined(REAL_TIMER)
 int RealTimer = 0;
-#else
-#define RealTimer 0
-#endif
 
+int screen_dirty;
+int hsize=480,vsize=64;
 volatile int interrupted=0;
 volatile int intvec = 0xfe; /* default IM 2 vector */
+int input_wait=0;
 int scrn_freq=2;
 
 unsigned char keyports[10]={0,0,0,0,0, 0,0,0,0,0};
@@ -143,37 +123,37 @@ int scancode[128];
 unsigned char key_state[128];
 int codering[CODERINGSIZE];
 int front = 0, end = 0;
-int coderingdowncount = 0;
 void key_handler(int scancode, int press);
 #endif
 
+unsigned char vidmem_old[4096];
 int refresh_screen=1;
 
 FILE *imagefile;
-FILE *printerfile = 0;
+/*FILE *portfile;*/
 
-int batch = 0;
-char *batcharg;
+int funny_lpt_loopback = 0;
 
 extern char VirtualDisks[4][1024];
 extern int VirtualDiskIsDir[4];
 
+/* MZ700 colors */
+#ifdef PROPER_COLOURS
+/* these look very nearly the same as on the MZ... */
+int mzcol2vga[8]={0,1,4,5,2,3,14,15};
+#else
+/* ...but curiously, *these* tend to look better in practice. */
+int mzcol2vga[8]={0,9,12,13,10,11,14,15};
+#endif
+
 int pending_timer_interrupts;
 int pending_vbln_interrupts;
-
-#if defined(USE_MZ80) && defined(TWO_Z80_COPIES)
-extern void mz80ReleaseTimeslice();
-extern void mz80fReleaseTimeslice();
-#  define SET_INTERRUPTED(a) mz80ReleaseTimeslice(), mz80fReleaseTimeslice(), interrupted = a
-#else
-#  define SET_INTERRUPTED(a) interrupted = a
-#endif
 
 /* handle timer interrupt */
 void sighandler(a)
      int a;
 {
-  if(interrupted<2) SET_INTERRUPTED(1);
+  if(interrupted<2) interrupted=1;
 
   /* This timer control is not very accurate but it works quite well */
 
@@ -203,7 +183,7 @@ void sighandler(a)
 	      int additional_timer_interrupts = 15600 / (cont1 * cont2 * ints_per_second) - 1;
 	      if (additional_timer_interrupts > 0)
 		pending_timer_interrupts += additional_timer_interrupts;
-	      SET_INTERRUPTED( 4); /* cause timer interrupt */
+	      interrupted = 4; /* cause timer interrupt */
 	    }
 	    timesec=cont2 /*0xa8c0*/;	/* 12 hrs in secs */
 	  }
@@ -220,7 +200,7 @@ void sighandler(a)
        timing (SN76489 control) and by a few games */
     /* FIXME: We actually should use the CONT0 value to
        determine how often to throw an interrupt. */
-    SET_INTERRUPTED( 4);
+    interrupted = 4;
     intvec = Z80PIOVec[0];
   }
 
@@ -231,7 +211,7 @@ void sighandler(a)
       pending_vbln_interrupts++;
     }
     else {
-      SET_INTERRUPTED( 4);
+      interrupted = 4;
       intvec = Z80PIOVec[0];
     }
   }
@@ -243,89 +223,87 @@ void pending_interrupts_hack()
   /* This is called directly after RETI */
   if (pending_timer_interrupts) {
     pending_timer_interrupts--;
-    SET_INTERRUPTED( 4);
+    interrupted = 4;
     intvec = 0;
   } 
   else if (pending_vbln_interrupts) {
     pending_vbln_interrupts--;
-    SET_INTERRUPTED( 4);
+    interrupted = 4;
     intvec = Z80PIOVec[0];
   }
 }
 
-#ifdef REAL_TIMER
 /* handle emulated 8253 timer interrupt */
 void sig8253handler(a)
      int a;
 {
-  if (timer_interrupt) SET_INTERRUPTED( 4);
-  else SET_INTERRUPTED( 1);
+  if (timer_interrupt) interrupted = 4;
+  else interrupted = 1;
 }
-#endif
 
 /* handle exit signals */
 void dontpanic(a)
      int a;
 {
   if(audio_fd!=-1) close(audio_fd);
-#if defined(PRINT_INVOKES_ENSCRIPT)
-  if (printerfile) {
-    if (!batch) pclose(printerfile), printerfile = 0;
-  }
-#endif
-#if 0
+
   { /* RAM disk store */
     FILE *ramdisk;
+#ifdef __DJGPP__
+    ramdisk = fopen("mzramdsk", "w");
+#else
     ramdisk = fopen("/tmp/mzramdisk", "w");
+#endif
     fwrite(mem + RAMDISK_START, 1024, 64, ramdisk);
     fclose(ramdisk);
   }
-#endif
   if (cmtfile) fclose(cmtfile);
-  if (!batch) {
-#if defined(__CYGWIN__)
-    close_windows();
+#if defined(USE_RAWKEY)
+  rawmode_exit();
 #else
-#  if defined(USE_RAWKEY)
-    rawmode_exit();
-#  else
-    keyboard_close();
-#  endif
-    vga_setmode(TEXT);
+#ifndef __DJGPP__
+  keyboard_close();
 #endif
-  }
-  exit(0);
+#endif
+  vga_setmode(TEXT);
+  exit(1);
 }
 
-#if !defined(__CYGWIN__)
 void screenon()
 {
-  if (!batch) {
-    vga_setmode(G320x200x256);
-    vptr=vga_getgraphmem();
-    memset(vptr,0,320*200);
-    refresh_screen=1;
-  }
-  else {
-    vptr = malloc(256*1024);
-#if !defined(__CYGWIN__) && !defined(VGA16)
-    directvideo = 1;
-#endif
-  }
+  vga_setmode(G320x200x256);
+  vptr=vga_getgraphmem();
+  memset(vptr,0,320*200);
+  refresh_screen=1;
 }
 
 void screenoff()
 {
-  if (!batch) {
-    vga_setmode(TEXT);
-  }
+  vga_setmode(TEXT);
 }
-#endif
 
 void dummy()
 {}
 
-#ifdef REAL_TIMER
+void outportb(int port, char a)
+{
+  /* direct output to /dev/port */
+  /*  fseek(portfile, port, SEEK_SET);
+  fwrite(&a, 1, 1, portfile);
+  fclose(p);*/
+  outb(a, port);
+}
+
+char inportb(int port)
+{
+  /* direct output to /dev/port */
+  /* char a;
+  fseek(portfile, port, SEEK_SET);
+  fread(&a, 1, 1, portfile); 
+  return a; */
+  return inb(port);
+}
+
 void set8253timer()
 {
   struct itimerval itv;
@@ -337,18 +315,8 @@ void set8253timer()
 						     2500) / 39) % 1000000;*/
   setitimer(ITIMER_REAL,&itv,NULL);
 }
-#endif
 
-void loadrom();
-void playsound();
-
-
-
-#if defined(__CYGWIN__)
-int semi_main(argc, argv)
-#else
 int main(argc,argv)
-#endif
      int argc;
      char **argv;
 {
@@ -358,12 +326,6 @@ int main(argc,argv)
   int f;
   unsigned short initial_pc = 0;
   int imagecnt = 0;
-  int mz700ish = 0;
-
-  if(argc>=2 && strcmp(argv[1],"-7")==0) { /* "Start up like a MZ-700" */ 
-    mz700ish = 1;
-    argv+=1, argc-=1;
-  }
 
   if(argc>=3 && strcmp(argv[1],"-t")==0) { /* "timer" */ 
     sscanf(argv[2], "%d", &ints_per_second);
@@ -377,30 +339,25 @@ int main(argc,argv)
     argv+=1, argc-=1;
   }
 
-  if (argc>=2 && strcmp(argv[1], "-b")==0) { /* batch */
-    batch = 1;
-    batcharg = argv[2];
-    argv+=2, argc-=2;
+  if(argc>=2 && strcmp(argv[1],"-l")==0) { /* "funny lpt loopback" */ 
+    funny_lpt_loopback = 1;
+    argv+=1, argc-=1;
   }
+
+  init_scroll();
+  vga_init();
 
   loadrom(mem);
   /* adjust ROM entry point */
+#ifdef MZ800IPL
+  mem[ROM_START+1] = 0x00; mem[ROM_START+2] = 0xe8;
+#else
+  mem[ROM_START+1] = 0x4A; mem[ROM_START+2] = 0x00;
+  mem[ROM800_START+0x800] = 0xB7; /* make 800 ROM invisible to the 700 Monitor */
+#endif
 
-  if (!mz700ish) {
-    mem[ROM_START+1] = 0x00; mem[ROM_START+2] = 0xe8;
-  }
-  else {
-    mem[ROM_START+1] = 0x4A; mem[ROM_START+2] = 0x00;
-    mem[ROM800_START+0x800] = 0xB7; /* make 800 ROM invisible to the 700 Monitor */
-  }
-
-  if (batch) { /* quit on boot */
-    *(unsigned long *)(mem+ROM_START) = 0xFAEDFF06;
-  }
-
-  /* hack rom load routines to call loader() (see end of edops.c for details) */
+  /* hack rom load routine to call loader() (see end of edops.c for details) */
   mem[ROM_START+0x0111]=0xed; mem[ROM_START+0x0112]=0xfc;
-  mem[ROM800_START+0xB4C]=0xdd; mem[ROM800_START+0xB4D]=0xed; mem[ROM800_START+0xB4E]=0xfc;
 
   /* hack IPL disk load routine to call diskloader() */
   mem[ROM800_START+0x5A7] = 0xed; mem[ROM800_START+0x5A8] = 0xfd; 
@@ -413,12 +370,7 @@ int main(argc,argv)
   /*  portfile = fopen("/dev/port", "rw"); */ /* only for printer port hack */
 
 #ifdef linux
-#  ifdef ALLOW_LPT_ACCESS
   ioperm(LPTPORT, 3, 1); /* allow LPT port access */
-#  endif
-#  if defined(VGA16)
-  ioperm(0x3c0, 16, 1); /* allow VGA port access */
-#  endif
 #endif
 
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
@@ -446,45 +398,38 @@ int main(argc,argv)
 #endif
     }
 
-  init_scroll();
-  out(0, 0xce, 8); /* set mz700 mode */
-  
-#if !defined(__CYGWIN__)
-  vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
-  if (!batch) vga_init();
   screenon();
-  update_palette();
-  if (!batch) {
-#  if defined(USE_RAWKEY)
-    rawmode_init();
-    set_switch_functions(screenoff,screenon);
-    allow_switch(1);
-    for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
-#  else
-    keyboard_init();
-    keyboard_seteventhandler(key_handler);
-    keyboard_translatekeys(DONT_CATCH_CTRLC);
-#  endif
-  }
+  vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
+
+#if defined(USE_RAWKEY)
+  rawmode_init();
+  set_switch_functions(screenoff,screenon);
+  allow_switch(1);
+  for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
+#else
+#ifndef __DJGPP__
+  keyboard_init();
+  keyboard_seteventhandler(key_handler);
+  keyboard_translatekeys(DONT_CATCH_CTRLC);
 #endif
-  
+#endif
+
   if(argc>=2 && strcmp(argv[1],"-c")==0) { /* "copy rom to ram" */ 
     memcpy(mem + RAM_START, mem + ROM_START, 4096);
     out(0, 0xe0, 0);
     argv++, argc--;
   }
 
-#ifdef REAL_TIMER
   /* Real Timer control */
+
   if(argc>=2 && strcmp(argv[1],"-r")==0) { /* "real-time" */
     RealTimer = 1;
     argv++, argc--;
   }
-#endif
-  
+
 #ifdef linux
   sa.sa_handler=dontpanic;
-  __sigemptyset(&sa.sa_mask);
+  sa.sa_mask=0;
   sa.sa_flags=SA_ONESHOT;
 
   sigaction(SIGINT, &sa,NULL);
@@ -497,22 +442,16 @@ int main(argc,argv)
 
   /* timer for speed control, screen update, etc */
 
-#if defined(__DJGPP__)
+#ifdef __DJGPP__
   sa.sa_handler=sighandler;
   memset(&sa.sa_mask, 0, sizeof(sa.sa_mask));
   sa.sa_flags=0;
-#elif defined(linux)
-  sa.sa_handler=sighandler;
-  __sigemptyset(&sa.sa_mask);
-  sa.sa_flags=SA_RESTART;
-#elif defined(__CYGWIN__)
+#endif
+#ifdef linux
   sa.sa_handler=sighandler;
   sa.sa_mask=0;
-  sa.sa_flags=0;
-#else
-#  error "Sorry, not supported."
+  sa.sa_flags=SA_RESTART;
 #endif
-#if !defined(__CYGWIN__) || !defined(WIN95PROOF) 
   if (!RealTimer)
     sigaction(SIGALRM,&sa,NULL);
   itv.it_value.tv_sec=  tmp/1000;
@@ -521,41 +460,27 @@ int main(argc,argv)
   itv.it_interval.tv_usec=(tmp%1000)*1000;
   if(!do_sound && !RealTimer) 
     setitimer(ITIMER_REAL,&itv,NULL);
-#endif
-  
+
   /* timer for 8253 emulation */
 
-#ifdef REAL_TIMER
-#  ifdef linux
+#ifdef linux
   if (RealTimer) {
     sa.sa_handler=sig8253handler;
     sa.sa_mask=0;
     sa.sa_flags=SA_RESTART;
     sigaction(SIGALRM,&sa,NULL);
   }
-#  endif
 #endif
-  
+
   cont1 = 0x3cfb; /* the cont1 is driven at 15.6 kHz */
   cont2 = 0xa8c0; /* seconds in 12 hours */
 
-#ifdef REAL_TIMER
-#  ifdef linux
+#ifdef linux
   if (RealTimer) {
     cont1 = 10; cont2 = 1; /* FIXME */ 
     set8253timer();
   }
-#  endif
 #endif
-  
-  /* Switch to boot memory configuration */
-
-  out(0, 0xe4, 0);
-
-  { /* Clear keyboard lines */
-    int y;
-    for(y=0;y<10;y++) keyports[y]=255;
-  }
   
   /* Init virtual disks */
   { 
@@ -569,9 +494,10 @@ int main(argc,argv)
   /* load RAM image */
   if (argc>=2) {
     FILE *in;
-    unsigned char buf[128];
+    unsigned char buf[128],*ptr;
     int ret=1;
     int start,len,exec;
+    int f;
     if ((in=fopen(argv[1],"rb"))!=NULL)
       {
 	fread(buf,1,4,in);
@@ -590,14 +516,13 @@ int main(argc,argv)
 	  exec =buf[0x16]+256*buf[0x17];
 	  memcpy(mem+RAM_START+0x10F0,buf,0x80);
 	  
+	  fread(mem+RAM_START+start,1,len,in);	/* read the rest */
+	  fclose(in);
+
 	  if (start < 0x1000) {
 	    out(0, 0xe0, 0);
 	    out(0, 0xe1, 0);
 	  }
-
-	  fread(mem+RAM_START+start,1,len,in);	/* read the rest */
-	  fclose(in);
-
 	  initial_pc = exec;
 
 	}
@@ -618,43 +543,32 @@ int main(argc,argv)
     for (i = imagecnt; i<4 && argc > 1; i++, argc--, argv++) {
       strncpy(VirtualDisks[i], argv[1], 1024);
       stat(argv[1], &s);
-      VirtualDiskIsDir[i] = !S_ISREG(s.st_mode);
+      VirtualDiskIsDir[i] = S_ISDIR(s.st_mode);
     }
-  }
-
-  if (batch) { /* put the batch-arg in the BASIC's key ring. */
-    int l = strlen(batcharg);
-    *(char *)mempointer(0x1352) = 0;
-    *(char *)mempointer(0x1353) = l + 1;
-    memcpy(mempointer(0x1354), batcharg, l);
-    *(char *)(mempointer(0x1354) + l) = 0x0d;
   }
 
   mainloop(initial_pc, /* initial_sp (for snap loads) */ 0x10F0);
 
   /* shouldn't get here, but... */
   if(audio_fd!=-1) close(audio_fd);
-#if !defined(__CYGWIN__)
-#  if defined(USE_RAWKEY)
+#if defined(USE_RAWKEY)
   rawmode_exit();
-#  endif
-  vga_setmode(TEXT);
 #endif
+  vga_setmode(TEXT);
   exit(0);
 }
 
 #ifdef linux
-#  define libpath "/usr/local/lib"
-#endif
-#ifdef __CYGWIN__
-#  define libpath "."
+#define libpath "/usr/local/lib"
 #endif
 #ifdef __DJGPP__
-#  define libpath "."
+#define libpath "."
 #endif
 
-void loadrom()
+loadrom()
+     /*unsigned char *x;*/
 {
+  int i;
   FILE *in;
 
   if((in=fopen(libpath "/mz700.rom","rb"))!=NULL)
@@ -692,7 +606,7 @@ void loadrom()
     }
 }
 
-void reset()
+reset()
 {
   /* MZ700 mode */
   out(0, 0xce, 8);
@@ -702,93 +616,51 @@ void reset()
   memcpy(mem+PCGRAM_START, mem+PCGROM_START, 4096);
   /* reprogram CRTC */
   init_scroll();
+  /* reset condition */
+  interrupted = 2;
 }
-
-#ifdef COPY_BANKSWITCH
-
-void bankswitch(int block, unsigned char *address, int attr)
-{
-  if (memptr[block] != address) {
-    unsigned long *a = (unsigned long *) address;
-    unsigned long *b = (unsigned long *) (memptr[block]);
-    unsigned long t;
-    int i;
-    for (i = 0; i<1024; i++, a++, b++) t = *a, *a = *b, *b = t;
-    memptr[block] = address;
-  }
-  memattr[block] = attr;
-}
-
-#  define BANKSWITCH(block, addr, attr) bankswitch(block, mem+(addr), attr)
-
-#  ifdef USE_MZ80
-     extern void bankswitchmode(int mode);
-#    define BANKSWITCHMODE(mode) bsmode = mode, bankswitchmode(mode)
-#    define BANKSWITCHALT(block, addr, attr) memattr[block]=attr
-#  else
-#    ifdef TWO_Z80_COPIES
-#      define BANKSWITCHMODE(mode) bsmode = mode, interrupted = 77
-#    else
-#      define BANKSWITCHMODE(mode) (void)0
-#    endif
-#    define BANKSWITCHALT(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
-#  endif
-#else
-#  define BANKSWITCH(block, addr, attr) memptr[block]=mem+(addr), memattr[block]=attr
-#  define BANKSWITCHALT BANKSWITCH
-#  define BANKSWITCHMODE(mode) (void)0
-#endif
 
 unsigned int in(h,l)
      int h,l;
 {
   static int ts=(13<<8);	/* num. t-states for this out, times 256 */
-#if defined(__CYGWIN__) && defined(WIN95PROOF)
-  static int count_hack = 0;
-  if (++count_hack == 5000) {
-    do_interrupt();
-    count_hack = 0;
-  }
-#endif
-
+  
   switch(l) {
   case 0xe0:
-    /* make 1000-1fff PCG ROM */
-    BANKSWITCH(1, PCGROM_START, 0);
+    /* make 1000-1fff PCG ROM and c000-cfff PCG RAM */
+    memptr[1] = mem + PCGROM_START; memattr[1] = 0;
     if (mz800mode) {
-      BANKSWITCHMODE(BSM_GRAPHICS);
       /* make 8000-bfff VIDEO RAM */
       /* this is not actually video ram but memory mapped I/O */
-      BANKSWITCHALT(8, VID_START, 2);
-      BANKSWITCHALT(9, VID_START, 2);
+      memptr[8] = mem + VID_START; memattr[8] = 2;
+      memptr[9] = mem + VID_START; memattr[9] = 2;
       if (DMD & 4) { /* 640x200 mode */
-	BANKSWITCHALT(10, VID_START, 2);
-	BANKSWITCHALT(11, VID_START, 2);
+	memptr[10] = mem + VID_START; memattr[10] = 2;
+	memptr[11] = mem + VID_START; memattr[11] = 2;
       }
       else { /* 320x200 mode */
-	BANKSWITCHALT(10, RAM_START + 0xa000, 1);
-	BANKSWITCHALT(11, RAM_START + 0xb000, 1);
+	memptr[10] = mem + RAM_START + 0xa000; memattr[10] = 1;
+	memptr[11] = mem + RAM_START + 0xb000; memattr[11] = 1;
       }
     }
     else {
       /* make c000-cfff PCG RAM */
-      BANKSWITCH(12, PCGRAM_START, 1);
+      memptr[12] = mem + PCGRAM_START; memattr[12] = 1;
     }
     return ts;
   case 0xe1:
     /* make 1000-1fff and c000-cfff RAM */
-    BANKSWITCH(1, RAM_START+0x1000, 1);
+    memptr[1]=mem+RAM_START+0x1000; memattr[1]=1;
     if (mz800mode) {
-      BANKSWITCHMODE(BSM_PLAIN);
       /* make 8000-bfff RAM */
-      BANKSWITCHALT(8, RAM_START + 0x8000, 1);
-      BANKSWITCHALT(9, RAM_START + 0x9000, 1);
-      BANKSWITCHALT(10, RAM_START + 0xa000, 1);
-      BANKSWITCHALT(11, RAM_START + 0xb000, 1);
+      memptr[8] = mem + RAM_START + 0x8000; memattr[8] = 1;
+      memptr[9] = mem + RAM_START + 0x9000; memattr[9] = 1;
+      memptr[10] = mem + RAM_START + 0xa000; memattr[10] = 1;
+      memptr[11] = mem + RAM_START + 0xb000; memattr[11] = 1;
     }
     else {
       /* make c000-cfff RAM */
-      BANKSWITCH(12, RAM_START+0xC000, 1);
+      memptr[12]=mem+RAM_START+0xC000; memattr[12]=1;
     }
     return ts;
 
@@ -820,22 +692,26 @@ unsigned int in(h,l)
 
   case 0xfe: /* printer status */
     {
-#ifdef ALLOW_LPT_ACCESS
-      char s = inb(LPTPORT+1);
-      char t = 0;
-      if (!(s & 0x80)) t|=1;
-      if ((s & 0x20)) t|=2;
-      return ts|t;
-#else
-      return ts;
-#endif
+      if (funny_lpt_loopback) {
+	char s = inportb(LPTPORT);
+	char t = 0;
+	if (!(s & 0x10)) t|=2;
+	if ((s & 0x04)) t|=1;
+	return ts|t;
+      }
+      else {
+	char s = inportb(LPTPORT+1);
+	char t = 0;
+	if (!(s & 0x80)) t|=1;
+	if ((s & 0x20)) t|=2;
+	return ts|t;
+      }
     }
   case 0xff: /* Printer data */
-#ifdef ALLOW_LPT_ACCESS
-    return ts | inb(LPTPORT);
-#else
-    return ts;
-#endif
+    if (funny_lpt_loopback) {
+      return ts | (inportb(LPTPORT+1) >> 3);
+    }
+    else return ts | inportb(LPTPORT);
   }
 
 #if 0
@@ -849,6 +725,7 @@ unsigned int out(h,l,a)
      int h,l,a;
 {
   static int ts=13;	/* num. t-states for this out */
+  time_t timet;
 
   /* h is ignored, except for l = 0xcf */
   switch(l)
@@ -872,9 +749,9 @@ unsigned int out(h,l,a)
 	update_DMD(a);
 	if (old_mz800mode != mz800mode) {
 	  if (mz800mode) {
-	    BANKSWITCH(13, RAM_START + 0xd000, 1);
-	    BANKSWITCH(14, RAM_START + 0xe000, 1);
-	    BANKSWITCH(15, RAM_START + 0xf000, 1);
+	    memptr[13] = mem + RAM_START + 0xd000; memattr[13] = 1;
+	    memptr[14] = mem + RAM_START + 0xe000; memattr[14] = 1;
+	    memptr[15] = mem + RAM_START + 0xf000; memattr[15] = 1;
 	  }
 	  else refresh_screen = 1;
 	  update_palette();
@@ -917,8 +794,8 @@ unsigned int out(h,l,a)
       /* make 1000-1FFF RAM */
       if(!bs_inhibit)
 	{
-	  BANKSWITCH(0, RAM_START, 1);
-	  BANKSWITCH(1, RAM_START+0x1000, 1);
+	  memptr[0]=mem+RAM_START; memattr[0]=1;
+	  memptr[1]=mem+RAM_START+0x1000; memattr[1]=1;
 	}
       return(ts);
   
@@ -927,11 +804,10 @@ unsigned int out(h,l,a)
       if(!bs_inhibit)
 	{
 	  if (!mz800mode) {
-	    BANKSWITCHMODE(BSM_PLAIN);
-	    BANKSWITCH(13, RAM_START+0xD000, 1);
+	    memptr[13]=mem+RAM_START+0xD000; memattr[13]=1;
 	  }
-	  BANKSWITCH(14, RAM_START+0xE000, 1);
-	  BANKSWITCH(15, RAM_START+0xF000, 1);
+	  memptr[14]=mem+RAM_START+0xE000; memattr[14]=1;
+	  memptr[15]=mem+RAM_START+0xF000; memattr[15]=1;
 	}
       return(ts);
   
@@ -939,7 +815,7 @@ unsigned int out(h,l,a)
       /* make 0000-0FFF ROM */
       if(!bs_inhibit)
 	{
-	  BANKSWITCH(0, ROM_START, 0);
+	  memptr[0]=mem+ROM_START; memattr[0]=0;
 	}
       return(ts);
   
@@ -948,28 +824,26 @@ unsigned int out(h,l,a)
       if(!bs_inhibit)
 	{
 	  if (!mz800mode) {
-	    BANKSWITCHMODE(BSM_MMIO);
-	    BANKSWITCH(13, VID_START, 1);
+	    memptr[13]=mem+VID_START; memattr[13]=1;
 	  }
-	  BANKSWITCH(14, ROM800_START, 2);
-	  BANKSWITCH(15, ROM800_START+0x1000, 0);
+	  memptr[14]=mem+ROM800_START; memattr[14]=2;
+	  memptr[15]=mem+ROM800_START+0x1000; memattr[15]=0;
 	}
       return(ts);
   
     case 0xe4:
       if (mz800mode) {
-	BANKSWITCHMODE(BSM_GRAPHICS);
 	/* make 0000-0fff ROM */
-	BANKSWITCH(0, ROM_START, 0);
+	memptr[0]=mem+ROM_START; memattr[0]=0;
 	/* make 1000-1fff PCG ROM */
 	/* make 8000-bfff VIDEO RAM */
 	in(0, 0xe0);
 	/* make c000-dfff RAM */
-	BANKSWITCH(12, RAM_START + 0xc000, 1);
-	BANKSWITCH(13, RAM_START + 0xd000, 1);
+	memptr[12] = mem + RAM_START + 0xc000; memattr[12] = 1;
+	memptr[13] = mem + RAM_START + 0xd000; memattr[13] = 1;
 	/* make e000-ffff ROM */
-	BANKSWITCH(14, ROM800_START, 0);
-	BANKSWITCH(15, ROM800_START+0x1000, 0);
+	memptr[14]=mem+ROM800_START; memattr[14]=0;
+	memptr[15]=mem+ROM800_START+0x1000; memattr[15]=0;
       }
       else {
 	/* "Performs the same function as pressing the
@@ -1014,10 +888,6 @@ unsigned int out(h,l,a)
       update_palette();
       return (ts);
 
-    case 0xf2: /* SN76489N (programmable sound generator) */
-      /* TODO: use EMULib to support the SN76489N */
-      return ts;
-
     case 0xfc: /* Z80PIO Channel A Control */
     case 0xfd: /* Z80PIO Channel B Control */
       
@@ -1055,9 +925,10 @@ unsigned int out(h,l,a)
       /* FE/FF is Z80PIO Data */
 
     case 0xff: /* Printer data */
-#ifdef ALLOW_LPT_ACCESS
-      outb(a, LPTPORT);
-#endif
+      if (funny_lpt_loopback) {
+	outportb(LPTPORT+1, a << 3);
+      }
+      else outportb(LPTPORT, a);
       return ts;
     }
 
@@ -1085,15 +956,6 @@ int mmio_in(addr)
       return(0xff);
     
     case 0xE001: /* 8255 Channel B */
-#if defined(__CYGWIN__) && defined(WIN95PROOF)
-      {
-	static int count_hack = 0;
-	if (++count_hack == 100) {
-	  do_interrupt();
-	  count_hack = 0;
-	}
-      }
-#endif
       /* read keyboard */
       if (pb_select > 9) return 0xFF; /* addressed nonexisting row */
       return(keyports[pb_select]);
@@ -1139,7 +1001,7 @@ int mmio_in(addr)
     
       /* MZ800: access additional ROM */
     
-      return *(unsigned char *)mempointer(addr) /*mem[ROM800_START + (addr - 0xE000)]*/;
+      return mem[ROM800_START + (addr - 0xE000)];
 
     }
 }
@@ -1177,7 +1039,7 @@ void mmio_out(addr,val)
     case 0xE003: /* 8255 Control */
       /* Ignore 8255 modes, as there are not many sensible choices for MZ700/800. 
 	 Just assume we have the usual situation */
-      if ((val & 0x80) == 0) {
+      if (val & 0x80 == 0) {
 	/* Handle Channel C bit set/reset commands */
 	switch ((val >> 1) & 7) {
 	case 2: /* Bit 2 inhibits the 8253 timer interrupt. */
@@ -1206,10 +1068,9 @@ void mmio_out(addr,val)
       else
 	cont1=((cont1&0xff00)|val);
       e007hi^=1;
-#ifdef REAL_TIMER
-      if (!e007hi && RealTimer) set8253timer();
-#endif
       
+      if (!e007hi && RealTimer) set8253timer();
+
       break;
 
     case 0xE006: /* cont2 - this takes the countdown timer */
@@ -1219,9 +1080,7 @@ void mmio_out(addr,val)
 	cont2=((cont2&0xff00)|val);
       e007hi^=1;
       timesec = cont2;
-#ifdef REAL_TIMER
       if (!e007hi && RealTimer) set8253timer();
-#endif
       break;
 
     case 0xE007:
@@ -1240,51 +1099,110 @@ void mmio_out(addr,val)
     }
 }
 
+/* redraw the screen (MZ700 mode) */
+update_scrn()
+{
+  static int count=0;
+  unsigned char *pageptr;
+  int x,y,mask,a,b,c,d;
+  unsigned char *ptr,*oldptr,*tmp,fg,bg;
+
+  retrace=1;
+
+#if 0
+  countsec++;
+
+  if (RealTimer) {
+    if(countsec>=50)
+    {
+      /* if e007hi is 1, we're in the middle of writing/reading the time,
+       * so put off the change till next 1/50th.
+       */
+      if(e007hi!=1)
+	{
+	  timesec--;
+	  if(timesec<=0) {
+	    interrupted = 4; /* cause timer interrupt */
+	    timesec=0xa8c0;	/* 12 hrs in secs */
+	  }
+	  countsec=0;
+	}
+    }
+  }
+#endif
+
+  if (!mz800mode) {
+
+    /* only do it every 1/Nth */
+    count++;
+    /*   if(count<scrn_freq) return(0); else count=0; */
+
+    ptr=mem+VID_START;
+    oldptr=vidmem_old;
+
+    for(y=0;y<25;y++)
+      {
+	for(x=0;x<40;x++,ptr++,oldptr++)
+	  {
+	    c=*ptr;
+	    if(*oldptr!=c || oldptr[2048]!=ptr[2048] || refresh_screen)
+	      {
+		fg=mzcol2vga[(ptr[2048]>>4)&7];
+		bg=mzcol2vga[ ptr[2048]    &7];
+      
+		for(b=0;b<8;b++)
+		  {
+		    tmp=vptr+(y*8+b)*320+x*8;
+		    d=(mem+PCGRAM_START+(ptr[2048]&128 ? 2048 : 0))[c*8+b];
+		    mask=1;
+		    for(a=0;a<8;a++,mask<<=1)
+		      *tmp++=(d&mask)?fg:bg;
+		  }
+	      }
+	  }
+      }
+
+    /* now, copy new to old for next time */
+    memcpy(vidmem_old,mem+VID_START,4096);
+  }
+  refresh_screen=0;
+}
+
 void toggle_blackwhite()
 {
   blackwhite = !blackwhite;
   update_palette();
 }
 
-#if defined(__CYGWIN__)
-#  define is_key_pressed(k) GetAsyncKeyState(k)
-#  define scan_keyboard() (void)0
-#  define keyboard_update() (void)0
+#if defined(USE_RAWKEY)
 #else
-#  if defined(USE_RAWKEY)
-#  else
-#   define is_key_pressed(k) key_state[k]
-#   define scan_keyboard keyboard_update
+# define is_key_pressed(k) key_state[k]
+# define scan_keyboard keyboard_update
+
 void key_handler(int scancode, int press)
 {
   if ((end+1) % CODERINGSIZE != front) {
-    codering[end] = press ? scancode : (scancode|0x8000);
-    if (press) coderingdowncount++;
+    codering[end] = press ? scancode : (scancode|0x80);
     end = (end+1) % CODERINGSIZE;
   }
   key_state[scancode&127] = press;
 }
-#  endif
 #endif
 
-void update_kybd()
+
+# define scan_keyboard dummy
+
+
+update_kybd()
 {
   int y;
-
-  for(y=0;y<10;y++) keyports[y]=0;
-
-#if defined(__CYGWIN__)
-  if (GetFocus() != window_handle) {
-    /* no key press if not active */
-    for(y=0;y<10;y++) keyports[y]=255;
-    return;
-  }
-#endif
 
 #if defined(USE_RAWKEY)
   for(y=0;y<5;y++) scan_keyboard();
 #else
+#ifndef __DJGPP__
   keyboard_update();
+#endif
 #endif
 
   if(is_key_pressed(SCANCODE_F10))
@@ -1296,7 +1214,7 @@ void update_kybd()
   if(is_key_pressed(SCANCODE_F11))
     {
       while(is_key_pressed(SCANCODE_F11)) { usleep(20000); scan_keyboard(); };
-      SET_INTERRUPTED( 2);	/* F11 = reset */
+      reset();	/* F11 = reset */
     }
 
   if(is_key_pressed(SCANCODE_F12))
@@ -1304,6 +1222,8 @@ void update_kybd()
       while(is_key_pressed(SCANCODE_F12)) { usleep(20000); scan_keyboard(); };
       toggle_blackwhite(); 
     }
+
+  for(y=0;y<10;y++) keyports[y]=0;
 
   /* this is a bit messy, but librawkey isn't too good at this sort
    * of thing - it wasn't really intended to be used like this :-)
@@ -1379,22 +1299,14 @@ void update_kybd()
   /* byte 7 */
   if(is_key_pressed(SCANCODE_SLASH))	keyports[7]|=0x01;
   if(is_key_pressed(SCANCODE_F8))		keyports[7]|=0x02;	/* ? */
-  if(is_key_pressed(SCANCODE_CURSORLEFT)
-     || is_key_pressed(SCANCODE_CURSORBLOCKLEFT))	keyports[7]|=0x04;
-  if(is_key_pressed(SCANCODE_CURSORRIGHT)
-     || is_key_pressed(SCANCODE_CURSORBLOCKRIGHT))	keyports[7]|=0x08;
-  if(is_key_pressed(SCANCODE_CURSORDOWN)
-     || is_key_pressed(SCANCODE_CURSORBLOCKDOWN))	keyports[7]|=0x10;
-  if(is_key_pressed(SCANCODE_CURSORUP)
-     || is_key_pressed(SCANCODE_CURSORBLOCKUP))		keyports[7]|=0x20;
+  if(is_key_pressed(SCANCODE_CURSORLEFT))		keyports[7]|=0x04;
+  if(is_key_pressed(SCANCODE_CURSORRIGHT))	keyports[7]|=0x08;
+  if(is_key_pressed(SCANCODE_CURSORDOWN))		keyports[7]|=0x10;
+  if(is_key_pressed(SCANCODE_CURSORUP))		keyports[7]|=0x20;
   if(is_key_pressed(SCANCODE_REMOVE))		keyports[7]|=0x40;
   if(is_key_pressed(SCANCODE_INSERT))		keyports[7]|=0x80;
 
   /* byte 8 */
-#ifdef __CYGWIN__
-  if (is_key_pressed(VK_SHIFT)) keyports[8]|=0x01;
-  if (is_key_pressed(VK_CONTROL)) keyports[8]|=0x40;
-#endif
   if(is_key_pressed(SCANCODE_LEFTSHIFT))		keyports[8]|=0x01;
   if(is_key_pressed(SCANCODE_RIGHTSHIFT))		keyports[8]|=0x01;
   if(is_key_pressed(SCANCODE_LEFTCONTROL))		keyports[8]|=0x40;
@@ -1411,36 +1323,27 @@ void update_kybd()
   for(y=0;y<10;y++) keyports[y]^=255;
 }
 
-void fix_tstates()
+fix_tstates()
 {
   tstates=0;
+#ifndef __DJGPP__
   if(do_sound)
     playsound();
   else
-#if defined(__CYGWIN__)
-    handle_messages(); /* FIXME */
-#else
     pause();
 #endif
 }
 
-void do_interrupt()
+
+do_interrupt()
 {
-#if !defined(PRINT_INVOKES_ENSCRIPT)
-  if (printerfile) fclose(printerfile), printerfile = 0;
-#endif  
-  if (!batch) {
-    update_scrn();
-    update_kybd();
-#if defined(__CYGWIN__)
-    handle_messages();
-#endif
-  }
-  if(interrupted<2) interrupted = 0;
+  update_scrn();
+  update_kybd();
+  if(interrupted<2) interrupted=0;
 }
 
 
-int loader(int addr)
+int loader()
 {
   FILE *in;
   unsigned char buf[128],*ptr;
@@ -1475,7 +1378,7 @@ int loader(int addr)
 	  start=buf[0x14]+256*buf[0x15];
 	  len  =buf[0x12]+256*buf[0x13];
 	  memcpy(mem+RAM_START+0x10F0,buf,0x80);
-	  if (addr) start = addr; /* Mz800-ish L */
+    
 	  fread(mem+RAM_START+start,1,len,in);	/* read the rest */
 	  fclose(in);
 	}
@@ -1493,7 +1396,7 @@ struct dcb {
   unsigned short Dest;
 };
 
-void diskloader(void *c) {
+int diskloader(void *c) {
   struct dcb *cb = (void *) ((char *) c - 1);
   if (imagefile) {
     fseek(imagefile, ((int) cb->Sector) * 256, SEEK_SET);
@@ -1558,7 +1461,7 @@ int cmthandler(int address, int length, int what)
 }
 
 /* write 256 samples to /dev/dsp */
-void playsound()
+playsound()
 {
   static unsigned char buf[256];
   int f,soundfreq;
@@ -1600,5 +1503,23 @@ void playsound()
   for(f=0;f<sizeof(sfreqbuf)/sizeof(int);f++) sfreqbuf[f]=-1;
 
   /* this runs instead of alarm int, so... */
-  if(interrupted<2) SET_INTERRUPTED(1);
+  if(interrupted<2) interrupted=1;
 }
+
+/*void init_ramdisk()
+{
+  const char header[16] = {0xff, 0xff, 0x10, 0, 0, 0, 0, 0, 8, 9, 10, 11, 12, 13, 14, 15};
+  memset(mem+RAMDISK_START, 0, 64*1024);
+  memcpy(mem+RAMDISK_START, header, 16);
+}
+
+struct ramdisk_entry {
+  unsigned short offset_to_next;
+  unsigned short magic1;
+  unsigned short type;
+  char name[
+
+};
+
+void to_ramdisk(FILE *file, char type, */
+
