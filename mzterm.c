@@ -21,17 +21,18 @@
 #include "rawkey.h"
 #include <stdio.h>
 #include <curses.h>
+#include <vga.h>
 
 /* FIXME: Everything still experimental */
 
-static int pending = 0;
+static int pending = ERR;
 
 static int rawmode = 1;
 
 void needcurses()
 {
   if (rawmode) {
-    rawmode_exit();
+/*     rawmode_exit(); */
     rawmode = 0;
     /* Start curses */
     initscr(); cbreak(); noecho();
@@ -41,29 +42,22 @@ void needcurses()
   }
 }
 
-char getmzkey()
+int getmzkey()
 {
   int c;
-  int i;
-#if 1
+
   needcurses();
-  c = /*curses*/ getch();
-  if (c == EOF) return 0;
-#endif
-#if 0
-  for (i= 0; i<5; i++) scan_keyboard();
-  if (pending) {
-    c = pending; 
-    pending = 0;
+  if (pending!=ERR) {
+    c = pending;
+    pending = ERR;
   }
   else {
-    scan_keyboard();
-    c = get_scancode();
-    if (c == -1) return 0;
+    keypad(stdscr, TRUE);
+    c = /*curses*/ getch();
   }
-  c = keymap_trans(c);
-  if (c == -1) return 0;
-#endif
+    
+  if (c == ERR) return 0;
+
   /* FIXME: Conversion */
   return c;
 }
@@ -72,22 +66,11 @@ int keypressed()
 {
   int i;
   int c;
-#if 1
   needcurses();
-  c = getch();
-  if (c <= 0) return 0;
-  ungetch(c);
-  return 1;
-#endif
-#if 0
-  for (i= 0; i<5; i++) scan_keyboard();
-  if (pending) return 1;
-  return 1;
-  pending = get_scancode();
-  if (pending != -1) return 1;
-  pending = 0;
-  return 0;
-#endif
+  if (pending != ERR) return 1;
+  keypad(stdscr, TRUE);
+  pending = getch();
+  return (pending != ERR);
 }
 
 int mztermservice(int channel, int width)
@@ -100,3 +83,21 @@ int mztermservice(int channel, int width)
   }
 }
 
+#if 1
+int main()
+{
+  FILE *f = fopen("x~~", "a");
+  needcurses();
+  keyboard_init_return_fd();
+  vga_init();
+  vga_setmode(G320x200x256);
+  keyboard_close();
+  while(1) {
+    if (keypressed())
+      fprintf(f, "%x \n", getmzkey()); fflush(f);
+  }
+  fclose(f);
+  vga_setmode(TEXT);
+  endwin();
+}
+#endif
