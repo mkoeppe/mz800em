@@ -1,8 +1,10 @@
-mz800em - an MZ800 emulator for VGA PCs running a Linux-based GNU system
+mz800em - an MZ800 emulator for VGA PCs running a Linux-based GNU
+system, also available for Windows-32 systems.
 
 Z80 emulation from `xz80', copyright (C) 1994 Ian Collier.
 MZ700 support and VGA front-end (C) 1996 Russell Marks.
-MZ800 support is copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
+MZ800 support and Windows-32 port are copr. 1998,1999 Matthias Koeppe 
+<mkoeppe@cs.uni-magdeburg.de>.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,11 +34,14 @@ README-700 is the original read-me file of mz700em by Russell Marks.
 Description
 -----------
 
-`mz800em' is a Sharp MZ800 emulator. It uses svgalib. You can run
-MZ80K, MZ700 and MZ800 programs. It supports most m/c programs and
-games. There are also methods for loading BASIC programs into some
-BASIC interpreters. A patched version of D-BASIC has full-featured
-access to directories in the Unix file system.
+`mz800em' is a Sharp MZ800 emulator. Its primary target are GNU/Linux
+systems; it uses svgalib there. It has also been ported to Windows-32
+systems, using Cygnus Solution's cygwin32 library.
+
+You can run MZ80K, MZ700 and MZ800 programs. It supports most m/c
+programs and games. There are also methods for loading BASIC programs
+into some BASIC interpreters. A patched version of D-BASIC has
+full-featured access to directories in the Unix file system.
 
 
 Getting mz800em
@@ -140,9 +145,13 @@ Russell writes:
 Mz800em now optionally works with MZ80, the `Multi-Z80 emulator' by
 Neil Bradley (ftp://ftp.synthcom.com/pub/emulators/cpu/makez80.zip),
 instead of mz800em's traditional Z80 kernel. MZ80 is coded in mixed
-16/32-bit x86 assembler code. On 486's it may lead to a ~30% speedup,
-but on a Pentium both kernels run at about the same speed. Note that I
-didn't try MZ80 too much.
+16/32-bit x86 assembler code, therefore faster than the C code. 
+
+From version 0.7 on, mz800em optionally includes two copies of the
+MZ80 kernel, one very fast copy for 64K RAM/ROM mode and one with more
+complex memory-access code for the memory-mapped modes. On
+bankswitching instructions, we switch between the two copies if
+necessary.
 
 
 Using mz800em
@@ -151,10 +160,11 @@ Using mz800em
 There's no man page due to this being a really quick hack, so this'll
 have to do. Sorry. :-)
 
-Mz800em uses SVGALIB, that is, you must run it on the console. 
+In GNU/Linux, mz800em uses SVGALIB, that is, you must run it on the
+console.  In Windows-32, mz800em runs in a window.
 
-You can quit with F10. Virtual console switching works as usual with
-Alt-Fn. 
+You can quit with F10. In GNU/Linux, virtual console switching works
+as usual with Alt-Fn.
 
 The emulated MZ800 attempts to run at 3.546MHz; the speed is
 timer-controlled. You can switch the speed control off by typing
@@ -346,8 +356,10 @@ One method, using a tape recorder with your soundcard, is described by
 Russell in the README-700 file. I didn't try this method seriously.
 
 If you have an MZ800 with a floppy disk, you might want to read MZ800
-floppies into your PC. I suspect this might work using setfdprm(8),
-but I don't know what to do actually. Please tell me, if you know.
+floppies into your PC. I suspect this might work using setfdprm(8) in
+GNU/Linux, but I don't know what to do actually. Please tell me, if
+you know. In MS-DOG, it might work using the `Anadisk' program
+available from Simtel, but I don't know.
 
 If you have somehow copied an image of your MZ800 disk to the PC, you
 can use my `mzextract' utility. This understands the MZ800 disk file

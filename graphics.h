@@ -21,7 +21,7 @@
 extern int mz800mode;
 extern int directvideo;
 extern int mzbpl;
-extern int DMD;
+extern int DMD, RF, WF;
 extern int SCROLL[8];
 extern unsigned char *vptr; /* real screen buffer */
 extern unsigned char *vbuffer; /* virtual screen buffer */ 

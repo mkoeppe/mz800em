@@ -1,6 +1,8 @@
 # Makefile for mz800em
 
-ifdef FAST 
+VERSION=0.7.2
+
+ifdef FAST
 
 # This will make the Z80 kernel faster, BUT you will lose speed
 # control (which is very important for games), correctness of
@@ -8,16 +10,31 @@ ifdef FAST
 # about register use, and the whole thing will hardly compile on
 # low-memory systems.
 
+ifdef PGCC
+CC=pgcc
+CFLAGS:=$(CFLAGS) -O9 -mpentium -march=pentium \
+	-B /usr/lib/gcc-lib/i586-pc-linux-gnu/pgcc-2.91.60/ \
+	-bi586-pc-linux-gnu \
+	-fno-exceptions
+else
+CFLAGS:=$(CFLAGS) -O9 -m486 -Wall
+endif
+
+PRINTFLAGS=-DPRINT_INVOKES_ENSCRIPT
+#  -DMZISHPRINTER
+
 Z80FLAGS=-DCOPY_BANKSWITCH -DHEAVY_LOAD -DSLOPPY_2 -DUSE_REGS \
-	-DNO_COUNT_TSTATES -DRISKY_REGS -DWIN95PROOF
-CFLAGS:=$(CFLAGS) -O9 -m486 
+	-DNO_COUNT_TSTATES -DRISKY_REGS -DWIN95PROOF \
+	 -DDELAYED_UPDATE -DTWO_Z80_COPIES $(PRINTFLAGS)
+
+#	-DVGA16
 
 else
 
 # This is the normal setting.
 
 Z80FLAGS=-DCOPY_BANKSWITCH -DUSE_REGS -DWIN95PROOF
-CFLAGS:=$(CFLAGS) -O -m486
+CFLAGS:=$(CFLAGS) -O -m486 -Wall
 
 endif
 
@@ -48,9 +65,23 @@ CFLAGS:=$(CFLAGS) -I. $(RAWKEYFLAGS) $(Z80FLAGS)
 
 #### Targets ####
 
+ifdef USE_MZ80 
 
-# this *looks* wrong, but *ops.c are actually #include'd by z80.c
-MZ800EM_OBJS=main.o z80.o disk.o graphics.o mzterm.o
+## Use Neil Bradley's multi-Z80 emulator
+Z80_OBJS = mz80/mz80.o mz80/mz80f.o mz80supp.o
+CFLAGS := $(CFLAGS) -DUSE_MZ80
+
+mz80/mz80.o mz80/mz80f.o: mz80/makez80.c
+	$(MAKE) -C mz80 mz80.o mz80f.o
+
+else 
+
+## Default: Use Ian Collier's Z80 emulator (with mkoeppe's changes)
+Z80_OBJS = z80.o 
+
+endif
+
+MZ800EM_OBJS=$(Z80_OBJS) main.o disk.o graphics.o mzterm.o
 
 MZ800WIN_OBJS=$(MZ800EM_OBJS) mz800win.o
 
@@ -92,21 +123,55 @@ install:
 
 #install -m 555 mzprint $(INSTALLPREFIX)/bin
 
+change: 
+	$(RM) -f main.o mz800em mz800em.exe
+
 clean:
-	$(RM) -f *.o *~ *.bak *.s *.i mz800em mzextract mzget 
+	$(RM) -f *.o *~ *.bak *.s *.i mz800em mz800em.exe mzextract mzget 
 
 #### Distribution section ####
 
-CYGFILES = mz800win.c mz800win.h scancode.h 
+CYGFILES = mz800win.c mz800win.h scancode.h mz.dll 
+
+MZ80FILES = mz80/Makefile mz80/makez80.c.dif mz80/README \
+	mz80/makez80.c-2.6-orig \
+	mz80/mz80.h mz80/mz80.txt mz80/z80stb.h 
+
+#	mz80/mz80.o mz80/mz80f.o
 
 FILES = COPYING ChangeLog Makefile README README-700 TODO BUGS		\
 	cbops.c edops.c font.txt					\
 	librawkey.a main.c mz700em.h mzextract.c mzget.c mzjoinimage	\
 	rawkey.h unpix.c z80.c z80.h z80ops.c disk.c graphics.h		\
-	graphics.c mzterm.c mzprint					\
-	$(CYGFILES)							\
+	graphics.c mzterm.c mzmagic mzcat mzprint mzprintw		\
+	$(CYGFILES) $(MZ80FILES)					\
 	mz800em.btx
 
-tgz: 
-	tar cfz mz800em-0.5.tar.gz $(FILES)
+## not distributed (SHARP copyright)
+ROMS = mz700.rom mz800.rom mz700fon.dat
 
+## Source distribution
+tgz: 
+	$(RM) /scratch/mz800em-$(VERSION)
+	ln -s `pwd` /scratch/mz800em-$(VERSION)
+	tar --directory=/scratch --create --file=/scratch/mz800em-$(VERSION).tar.gz \
+		--gzip $(addprefix mz800em-$(VERSION)/, $(FILES))
+	$(RM) /scratch/mz800em-$(VERSION)
+
+## Binary distribution
+share.tgz:
+	tar cfz share.tgz share bin --exclude="*tar.exe" \
+		--exclude="*gunzip.exe"
+
+bindist1: share.tgz
+	mkdir -p a:/mz/bin
+	cp cygwin1.dll a:/mz
+	cp bin/tar.exe bin/gunzip.exe a:/mz/bin
+	cp install.bat a:/mz
+	cp share.tgz a:/mz
+
+bindist2:
+	mkdir -p a:/mz
+	cp COPYING MZ.DLL README cygwin1.dll basick.mzf basic.bat  \
+		mz800em.exe mzprintw  \
+	    a:/mz

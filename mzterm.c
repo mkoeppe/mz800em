@@ -411,10 +411,15 @@ void send_datetime()
 void hardcopy(int miny, int maxy, int mode)
 {
   int x, y, k;
-  unsigned char *p = readptr;
+  unsigned char *p;
+  char *pnmname;
+  FILE *pnmfile;
+  /* ensure reading from plane A */
+  update_RF(RF &~ 0x10); 
+  p = readptr;
   /* Create a pbm file; format see `man 5 pbm'. */
-  char *pnmname = tempnam(0, "mz");
-  FILE *pnmfile = fopen(pnmname, "w");
+  pnmname = tempnam(0, "mz");
+  pnmfile = fopen(pnmname, "w");
   fprintf(pnmfile, "P1\n");
   fprintf(pnmfile, "# pbm file created by mz800em's hcopy command\n");
   fprintf(pnmfile, "%d %d\n", mzbpl * 8, maxy - miny);

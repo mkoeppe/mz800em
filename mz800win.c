@@ -80,7 +80,7 @@ void vga_drawscansegment(unsigned char *buffer, int x, int y, int pixels)
   }
 }
 
-void win_update_graphics(void)
+void do_update_graphics(void)
 {
   int y;
   if (update_rect.bottom > update_rect.top) {
@@ -139,7 +139,7 @@ static LRESULT CALLBACK window_proc(HWND Wnd, UINT Message,
       SelectPalette(dc, hpalette, 1);
 #endif
       UnionRect(&update_rect, &update_rect, &paint.rcPaint);
-      win_update_graphics();
+      do_update_graphics();
       EndPaint(window_handle, &paint), dc = 0;
       drawlock = 0;
       return 0;

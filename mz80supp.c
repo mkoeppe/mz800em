@@ -1,6 +1,6 @@
 /* mz800em, a VGA MZ800 emulator for Linux.
  * 
-/* Support for the MZ80 emulator kernel by Neil Bradley 
+ * Support for the MZ80 emulator kernel by Neil Bradley 
  * Copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include "z80.h"
 #include "mz700em.h"
 #include "mz80/mz80.h"
 #include <string.h>

@@ -5,7 +5,7 @@ extern HWND window_handle;
 void setup_windows(void);
 void close_windows(void);
 void handle_messages(void);
-void win_update_graphics(void);
+void do_update_graphics(void);
 
 /* Constants compatible with vgakeyboard.h */
 
