@@ -25,6 +25,7 @@
 #ifdef __CYGWIN__
 #  include <windows.h>
 #endif
+#include "mz700em.h"
 #include "graphics.h"
 
 int mz800mode=0;
@@ -76,21 +77,27 @@ void update_DMD(int a)
 
 void update_DMD(int a)
 {
-  if ((DMD & 4) != (a & 4)) {
-    /* switch between 320 and 640 mode */
-    if (a&4) { /* switch to 640 mode */
-      vga_setmode(G640x200x16);
-      vptr = 0; /* no direct writes */
-      directvideo = 0;
-      mzbpl = 80;
+  if (batch) {
+    directvideo = 1;
+    mzbpl = 40;
+  }
+  else {
+    if ((DMD & 4) != (a & 4)) {
+      /* switch between 320 and 640 mode */
+      if (a&4) { /* switch to 640 mode */
+	vga_setmode(G640x200x16);
+	vptr = 0; /* no direct writes */
+	directvideo = 0;
+	mzbpl = 80;
+      }
+      else { /* switch to 320 mode */
+	vga_setmode(G320x200x256);
+	vptr = vga_getgraphmem();
+	directvideo = 1;
+	mzbpl = 40;
+      }
+      update_palette();
     }
-    else { /* switch to 320 mode */
-      vga_setmode(G320x200x256);
-      vptr = vga_getgraphmem();
-      directvideo = 1;
-      mzbpl = 40;
-    }
-    update_palette();
   }
   DMD = a & 7;
   update_RF(RF);
@@ -102,14 +109,16 @@ void update_palette()
   int i;
   int color;
   int *colors = blackwhite ? mzgrays : mzcolors;
-  for (i = 0; i < 16; i++) {
-    if (mz800mode) {
-      if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
+  if (!batch) {
+    for (i = 0; i < 16; i++) {
+      if (mz800mode) {
+	if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
+	else color = colors[i];
+      }
       else color = colors[i];
+      vga_setpalette(i,
+		     (color >> 8) & 63, (color >> 16) & 63, color & 63);
     }
-    else color = colors[i];
-    vga_setpalette(i,
-		   (color >> 8) & 63, (color >> 16) & 63, color & 63);
   }
 }
 
@@ -214,7 +223,7 @@ void graphics_write(int addr, int value)
 static int readplaneb;
 static unsigned char readcolorplanes;
 static unsigned char colormask;
-static unsigned char *readptr;
+unsigned char *readptr;
 
 void update_RF(int a)
 {
@@ -345,3 +354,32 @@ void init_scroll()
   BCOL = OBCOL = 0;
 }
 
+void planeonoff(plane_struct *ps, int on)
+{
+  unsigned char *b = vbuffer + 0x20000
+    + ps->y1 * mzbpl * 8 + (ps->x1 / 8) * 8;
+  unsigned char *a = (directvideo ? vptr : vbuffer)
+    + ps->y1 * mzbpl * 8 + (ps->x1 / 8) * 8;
+  int c = (ps->x2/8 - ps->x1/8 + 1) * 8;
+  int y;
+  if (on) {
+    for (y = ps->y1; y<=ps->y2; b += mzbpl*8, a+= mzbpl*8, y++)
+      memcpy(b, a, c);
+  }
+  else {
+    for (y = ps->y1; y<=ps->y2; b += mzbpl*8, a+= mzbpl*8, y++) {
+      memcpy(a, b, c);
+      if (!directvideo) 
+	vga_drawscansegment(b, (ps->x1/8)*8, y, c);
+    }
+  }
+}
+
+void clearscreen(int endaddr, int count, int color)
+{
+  update_WF(color | 0x80);
+  endaddr--;
+  /* FIXME: accelerate */
+  for (; count; count--, endaddr--)
+    graphics_write(endaddr, 0); 
+}

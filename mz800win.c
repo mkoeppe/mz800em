@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <windows.h>
 #include "mz700em.h"
 #include "mz800win.h"
@@ -31,7 +32,9 @@ void begin_draw()
 {
   if (dc == 0) {
     dc = GetDC(window_handle);
+#if !defined(WIN95PROOF)
     SelectPalette(dc, hpalette, 1 /* foreground/background mode ???? */ );
+#endif
   }
   drawlock++;
 }
@@ -103,7 +106,8 @@ void update_palette()
   int i;
   int color;
   int *colors = blackwhite ? mzgrays : mzcolors;
-
+  extern int refresh_screen;
+  
   for (i = 0; i < 16; i++) {
     if (mz800mode) {
       if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
@@ -115,7 +119,9 @@ void update_palette()
     logpalette.palPalEntry[i].peBlue = (color & 63) * 4;
     logpalette.palPalEntry[i].peFlags = PC_RESERVED;
   }
+#if !defined(WIN95PROOF)
   AnimatePalette(hpalette, 0, 16, logpalette.palPalEntry);
+#endif
   update_rect.top = update_rect.left = 0;
   update_rect.right = 640, update_rect.bottom = 400;
   refresh_screen = 1;
@@ -127,9 +133,11 @@ static LRESULT CALLBACK window_proc(HWND Wnd, UINT Message,
   switch (Message) {
     case WM_PAINT: if (!drawlock) {
       PAINTSTRUCT paint;
-      dc = BeginPaint(window_handle, &paint);
-      SelectPalette(dc, hpalette, 1);
       drawlock = 1;
+      dc = BeginPaint(window_handle, &paint);
+#if !defined(WIN95PROOF)
+      SelectPalette(dc, hpalette, 1);
+#endif
       UnionRect(&update_rect, &update_rect, &paint.rcPaint);
       win_update_graphics();
       EndPaint(window_handle, &paint), dc = 0;
@@ -146,6 +154,8 @@ static LRESULT CALLBACK window_proc(HWND Wnd, UINT Message,
   }
 }
 
+extern int ints_per_second;
+
 void setup_windows(void)
 {
   WNDCLASS C;
@@ -156,7 +166,7 @@ void setup_windows(void)
   C.style = 0;
   C.lpfnWndProc = window_proc;
   C.hInstance = hInstance;
-  C.hIcon = LoadIcon(0, IDI_APPLICATION);
+  C.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(1));
   C.cbWndExtra = 0;
   C.cbClsExtra = 0;
   C.hbrBackground = GetStockObject(BLACK_BRUSH);
@@ -183,7 +193,8 @@ void setup_windows(void)
     
   window_handle = CreateWindow("Mz800em", "mz800em", 
 			       WS_OVERLAPPEDWINDOW &~ (WS_THICKFRAME | WS_MAXIMIZEBOX),
-			       CW_USEDEFAULT, CW_USEDEFAULT, 640, 400, 0, 0, hInstance, NULL);
+			       CW_USEDEFAULT, CW_USEDEFAULT, 646, 425, 0, 0, hInstance, NULL);
+#if !defined(WIN95PROOF)
   {
     /* Change size */
     NCCALCSIZE_PARAMS info;
@@ -197,11 +208,16 @@ void setup_windows(void)
     plcmnt.rcNormalPosition.bottom += 400 - info.rgrc[0].bottom + info.rgrc[0].top;
     SetWindowPlacement(window_handle, &plcmnt);
   }
+#endif
+
+  SetTimer(window_handle, 1, 1000/ints_per_second, NULL);
+
   ShowWindow(window_handle, SW_SHOW);
 }
 
 void close_windows(void)
 {
+  KillTimer(window_handle, 1);
   DestroyWindow(window_handle);
 }
 
@@ -216,6 +232,8 @@ void key_handler(int scancode, int press)
   }
 }
 
+extern void sighandler(int);
+
 void handle_messages(void)
 {
   MSG msg;
@@ -228,6 +246,7 @@ void handle_messages(void)
 	|| msg.message == WM_SYSKEYUP || msg.message == WM_SYSKEYDOWN) 
       key_handler(HIWORD(msg.lParam) & 255, (msg.message == WM_KEYDOWN 
 					     || msg.message == WM_SYSKEYDOWN)); 
+    if (msg.message == WM_TIMER) sighandler(1);
     DispatchMessage(&msg); 
   }
 }
@@ -239,7 +258,23 @@ int CALLBACK WinMain(HINSTANCE hCurrent, HINSTANCE hPrevious,
 {
   hInstance = hCurrent;
   setup_windows();
-  semi_main(1, (char **) &lpCmdLine);
+  {
+    char *cmd = strdup(lpCmdLine);
+    char *p;
+    int argc = 1;
+    char *argv[16];
+    int i;
+    argv[0] = "mz800em";
+    argv[1] = cmd;
+    for (p = cmd; *p && argc < 15; p++)
+      if (*p == ' ') {
+	do { *p++=0; } while (*p == ' ');
+	argv[++argc] = p;
+      }
+    if (argv[argc] != p) argc++;
+    semi_main(argc, argv);
+    free(cmd);
+  }
   close_windows();
   return 0;
 }

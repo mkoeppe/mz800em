@@ -90,7 +90,14 @@ static void MakeDirectory(char *path)
   dir = opendir(buf);
   i = 0;
   while (dirent = readdir(dir)) {
-    char *pathv = dirent->d_name;
+    char pathv[300];
+    strcpy(pathv, path);
+    strcat(pathv, "/");
+    {
+      char *c;
+      for (c = dirent->d_name; *c; c++) *c = tolower(*c);
+    }
+    strcat(pathv, dirent->d_name);
     if (strlen(pathv) > 4 
 	&& stricmp(pathv + strlen(pathv) - 4, ".btx")==0) {
 #else /* with glob */
@@ -218,7 +225,7 @@ static void DirectoryChange(char *dir, DirEntry *nw, DirEntry *old)
     strcat(b, RealName(buf, nw));
     strcat(b, ".btx");
     rename(a, b);
-#if defined(__CYGWIN__)
+#if 0 /*defined(__CYGWIN__)*/
     { /* dont have truncate */
       FILE *ff = fopen(b, "rwb");
       ftruncate(ff->_file, nw->len);

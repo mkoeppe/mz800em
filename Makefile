@@ -9,14 +9,14 @@ ifdef FAST
 # low-memory systems.
 
 Z80FLAGS=-DCOPY_BANKSWITCH -DHEAVY_LOAD -DSLOPPY_2 -DUSE_REGS \
-	-DNO_COUNT_TSTATES -DRISKY_REGS
-CFLAGS:=$(CFLAGS) -O9 -m486
+	-DNO_COUNT_TSTATES -DRISKY_REGS -DWIN95PROOF
+CFLAGS:=$(CFLAGS) -O9 -m486 
 
 else
 
 # This is the normal setting.
 
-Z80FLAGS=-DCOPY_BANKSWITCH -DUSE_REGS
+Z80FLAGS=-DCOPY_BANKSWITCH -DUSE_REGS -DWIN95PROOF
 CFLAGS:=$(CFLAGS) -O -m486
 
 endif
@@ -90,6 +90,8 @@ install:
 	install -m 555 mzjoinimage $(INSTALLPREFIX)/bin
 	install -m 444 mz700.rom mz700fon.dat mz800.rom $(INSTALLPREFIX)/lib
 
+#install -m 555 mzprint $(INSTALLPREFIX)/bin
+
 clean:
 	$(RM) -f *.o *~ *.bak *.s *.i mz800em mzextract mzget 
 
@@ -101,7 +103,7 @@ FILES = COPYING ChangeLog Makefile README README-700 TODO BUGS		\
 	cbops.c edops.c font.txt					\
 	librawkey.a main.c mz700em.h mzextract.c mzget.c mzjoinimage	\
 	rawkey.h unpix.c z80.c z80.h z80ops.c disk.c graphics.h		\
-	graphics.c mzterm.c						\
+	graphics.c mzterm.c mzprint					\
 	$(CYGFILES)							\
 	mz800em.btx
 

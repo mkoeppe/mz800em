@@ -25,6 +25,7 @@ extern int DMD;
 extern int SCROLL[8];
 extern unsigned char *vptr; /* real screen buffer */
 extern unsigned char *vbuffer; /* virtual screen buffer */ 
+extern unsigned char *readptr;
 
 /* MZ800 colors */
 extern int palette[4];
@@ -43,3 +44,15 @@ extern void scroll();
 extern void init_scroll();
 extern void update_palette();
 
+/* mzterm services */
+
+typedef struct {
+  unsigned short x1;
+  unsigned short x2;
+  unsigned short y1;
+  unsigned char r[5];
+  unsigned short y2;
+} __attribute__ ((aligned (1), packed)) plane_struct;
+
+extern void planeonoff(plane_struct *ps, int on);
+extern void clearscreen(int endaddr, int count, int color);

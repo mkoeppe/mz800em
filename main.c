@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/time.h>
@@ -31,6 +30,7 @@
 #include <time.h>
 #ifdef linux
 #  define unixish
+#  include <linux/signal.h>
 #  include <vga.h>
 #  include <vgakeyboard.h>
 #  if defined(USE_RAWKEY)
@@ -42,6 +42,7 @@
 #endif
 #ifdef __CYGWIN__
 #  define unixish
+#  include <signal.h>
 #  include "mz800win.h"
 #endif
 
@@ -82,7 +83,12 @@ int memattr[16]={1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1};
 
 unsigned long tstates=0;
 unsigned long tsmax=70000L;
+#ifdef __CYGWIN__
+/* Timer resolution is very low */
+int ints_per_second = 20;
+#else
 int ints_per_second = 50;
+#endif
 int countsec=0;
 int bs_inhibit=0;
 int ramdisk_addr;
@@ -145,6 +151,11 @@ FILE *imagefile;
 #ifdef ALLOW_LPT_ACCESS
 int funny_lpt_loopback = 0;
 #endif
+
+FILE *printerfile;
+
+int batch = 0;
+char *batcharg;
 
 extern char VirtualDisks[4][1024];
 extern int VirtualDiskIsDir[4];
@@ -253,7 +264,11 @@ void dontpanic(a)
      int a;
 {
   if(audio_fd!=-1) close(audio_fd);
-
+#if defined(linux)
+  if (printerfile) {
+    if (!batch) pclose(printerfile), printerfile = 0;
+  }
+#endif
 #if 0
   { /* RAM disk store */
     FILE *ramdisk;
@@ -263,31 +278,41 @@ void dontpanic(a)
   }
 #endif
   fclose(cmtfile);
+  if (!batch) {
 #if defined(__CYGWIN__)
-  close_windows();
+    close_windows();
 #else
 #  if defined(USE_RAWKEY)
-  rawmode_exit();
+    rawmode_exit();
 #  else
-  keyboard_close();
+    keyboard_close();
 #  endif
-  vga_setmode(TEXT);
+    vga_setmode(TEXT);
 #endif
-  exit(1);
+  }
+  exit(0);
 }
 
 #if !defined(__CYGWIN__)
 void screenon()
 {
-  vga_setmode(G320x200x256);
-  vptr=vga_getgraphmem();
-  memset(vptr,0,320*200);
-  refresh_screen=1;
+  if (!batch) {
+    vga_setmode(G320x200x256);
+    vptr=vga_getgraphmem();
+    memset(vptr,0,320*200);
+    refresh_screen=1;
+  }
+  else {
+    vptr = malloc(256*1024);
+    directvideo = 1;
+  }
 }
 
 void screenoff()
 {
-  vga_setmode(TEXT);
+  if (!batch) {
+    vga_setmode(TEXT);
+  }
 }
 #endif
 
@@ -297,20 +322,11 @@ void dummy()
 #if defined(ALLOW_LPT_ACCESS)
 void outportb(int port, char a)
 {
-  /* direct output to /dev/port */
-  /*  fseek(portfile, port, SEEK_SET);
-  fwrite(&a, 1, 1, portfile);
-  fclose(p);*/
   outb(a, port);
 }
 
 char inportb(int port)
 {
-  /* direct output to /dev/port */
-  /* char a;
-  fseek(portfile, port, SEEK_SET);
-  fread(&a, 1, 1, portfile); 
-  return a; */
   return inb(port);
 }
 #endif
@@ -362,6 +378,12 @@ int main(argc,argv)
     argv+=1, argc-=1;
   }
 
+  if (argc>=2 && strcmp(argv[1], "-b")==0) { /* batch */
+    batch = 1;
+    batcharg = argv[2];
+    argv+=2, argc-=2;
+  }
+
 #ifdef ALLOW_LPT_ACCESS
   if(argc>=2 && strcmp(argv[1],"-l")==0) { /* "funny lpt loopback" */ 
     funny_lpt_loopback = 1;
@@ -378,6 +400,10 @@ int main(argc,argv)
   else {
     mem[ROM_START+1] = 0x4A; mem[ROM_START+2] = 0x00;
     mem[ROM800_START+0x800] = 0xB7; /* make 800 ROM invisible to the 700 Monitor */
+  }
+
+  if (batch) { /* quit on boot */
+    *(unsigned long *)(mem+ROM_START) = 0xFAEDFF06;
   }
 
   /* hack rom load routines to call loader() (see end of edops.c for details) */
@@ -430,19 +456,21 @@ int main(argc,argv)
   
 #if !defined(__CYGWIN__)
   vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
-  vga_init();
+  if (!batch) vga_init();
   screenon();
   update_palette();
+  if (!batch) {
 #  if defined(USE_RAWKEY)
-  rawmode_init();
-  set_switch_functions(screenoff,screenon);
-  allow_switch(1);
-  for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
+    rawmode_init();
+    set_switch_functions(screenoff,screenon);
+    allow_switch(1);
+    for(f=32;f<127;f++) scancode[f]=scancode_trans(f);
 #  else
-  keyboard_init();
-  keyboard_seteventhandler(key_handler);
-  keyboard_translatekeys(DONT_CATCH_CTRLC);
+    keyboard_init();
+    keyboard_seteventhandler(key_handler);
+    keyboard_translatekeys(DONT_CATCH_CTRLC);
 #  endif
+  }
 #endif
   
   if(argc>=2 && strcmp(argv[1],"-c")==0) { /* "copy rom to ram" */ 
@@ -489,6 +517,7 @@ int main(argc,argv)
 #else
 #  error "Sorry, not supported."
 #endif
+#if !defined(__CYGWIN__) || !defined(WIN95PROOF) 
   if (!RealTimer)
     sigaction(SIGALRM,&sa,NULL);
   itv.it_value.tv_sec=  tmp/1000;
@@ -497,7 +526,8 @@ int main(argc,argv)
   itv.it_interval.tv_usec=(tmp%1000)*1000;
   if(!do_sound && !RealTimer) 
     setitimer(ITIMER_REAL,&itv,NULL);
-
+#endif
+  
   /* timer for 8253 emulation */
 
 #ifdef REAL_TIMER
@@ -526,6 +556,11 @@ int main(argc,argv)
   /* Switch to boot memory configuration */
 
   out(0, 0xe4, 0);
+
+  { /* Clear keyboard lines */
+    int y;
+    for(y=0;y<10;y++) keyports[y]=255;
+  }
   
   /* Init virtual disks */
   { 
@@ -591,6 +626,14 @@ int main(argc,argv)
       stat(argv[1], &s);
       VirtualDiskIsDir[i] = S_ISDIR(s.st_mode);
     }
+  }
+
+  if (batch) { /* put the batch-arg in the BASIC's key ring. */
+    int l = strlen(batcharg);
+    *(char *)mempointer(0x1352) = 0;
+    *(char *)mempointer(0x1353) = l + 1;
+    memcpy(mempointer(0x1354), batcharg, l);
+    *(char *)(mempointer(0x1354) + l) = 0x0d;
   }
 
   mainloop(initial_pc, /* initial_sp (for snap loads) */ 0x10F0);
@@ -697,7 +740,14 @@ unsigned int in(h,l)
      int h,l;
 {
   static int ts=(13<<8);	/* num. t-states for this out, times 256 */
-  
+#if defined(__CYGWIN__) && defined(WIN95PROOF)
+  static int count_hack = 0;
+  if (++count_hack == 5000) {
+    do_interrupt();
+    count_hack = 0;
+  }
+#endif
+
   switch(l) {
   case 0xe0:
     /* make 1000-1fff PCG ROM and c000-cfff PCG RAM */
@@ -1039,6 +1089,15 @@ int mmio_in(addr)
       return(0xff);
     
     case 0xE001: /* 8255 Channel B */
+#if defined(__CYGWIN__) && defined(WIN95PROOF)
+      {
+	static int count_hack = 0;
+	if (++count_hack == 100) {
+	  do_interrupt();
+	  count_hack = 0;
+	}
+      }
+#endif
       /* read keyboard */
       if (pb_select > 9) return 0xFF; /* addressed nonexisting row */
       return(keyports[pb_select]);
@@ -1445,6 +1504,10 @@ update_kybd()
   if(is_key_pressed(SCANCODE_INSERT))		keyports[7]|=0x80;
 
   /* byte 8 */
+#ifdef __CYGWIN__
+  if (is_key_pressed(VK_SHIFT)) keyports[8]|=0x01;
+  if (is_key_pressed(VK_CONTROL)) keyports[8]|=0x40;
+#endif
   if(is_key_pressed(SCANCODE_LEFTSHIFT))		keyports[8]|=0x01;
   if(is_key_pressed(SCANCODE_RIGHTSHIFT))		keyports[8]|=0x01;
   if(is_key_pressed(SCANCODE_LEFTCONTROL))		keyports[8]|=0x40;
@@ -1477,11 +1540,17 @@ fix_tstates()
 
 do_interrupt()
 {
-  update_scrn();
-  update_kybd();
 #if defined(__CYGWIN__)
-  handle_messages();
+  /* not in linux */
+  if (printerfile) fclose(printerfile), printerfile = 0;
+#endif  
+  if (!batch) {
+    update_scrn();
+    update_kybd();
+#if defined(__CYGWIN__)
+    handle_messages();
 #endif
+  }
   if(interrupted<2) interrupted=0;
 }
 

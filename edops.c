@@ -618,7 +618,7 @@ instr(0xfa, 4);
      L is bit count;
      A is maybe parameter;
      returns A service result. */
-  a = mztermservice(b, l, a);     
+  a = mztermservice(b, l, a, sp);     
 }
 endinstr;
 

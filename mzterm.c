@@ -23,13 +23,13 @@
 #endif
 #ifdef __CYGWIN__
 #  include "mz800win.h"
-#  include <sys/time.h>
 #endif
-
 #include <time.h>
+#include <sys/time.h>
 #include <stdio.h>
 #include "mz700em.h"
 #include "z80.h"
+#include "graphics.h"
 
 /* You need a special patched version of the DBASIC interpreter to use 
    the services provided in this file. */
@@ -46,7 +46,7 @@ static void needconsole()
 }
 
 #define S(n, s) (ctrl ? 0 : (shift ? s : n))
-#define A(n, s, a) (ctrl ? 0 : (alt ? a : (shift ? s : n)))
+#define A(n, s, a) (alt ? a : (ctrl ? 0 : (shift ? s : n)))
 #define L(n, s) (ctrl ? 0 : (shift^scrolllock ? s : n))
 #define CL(n, s) (ctrl ? n - '@' : (shift^scrolllock ? s : n))
 
@@ -64,7 +64,11 @@ int getmzkey()
   needconsole();
 
   if (is_key_pressed(SCANCODE_RIGHTSHIFT) && is_key_pressed(SCANCODE_RIGHTCONTROL) /* mzterm-ish */
-      || ((is_key_pressed(SCANCODE_LEFTSHIFT) || is_key_pressed(SCANCODE_RIGHTSHIFT))
+      || ((is_key_pressed(SCANCODE_LEFTSHIFT) 
+#if defined(__CYGWIN__)
+	   || is_key_pressed(VK_SHIFT)
+#endif
+	   || is_key_pressed(SCANCODE_RIGHTSHIFT))
 	  && is_key_pressed(SCANCODE_BACKSPACE) /* mz800em-ish break */ )) {
     static long last_async_break = 0;
     long ticks;
@@ -87,10 +91,19 @@ int getmzkey()
   if (!(c&0x8000)) coderingdowncount--;
 
 #if defined(__CYGWIN__)
-  rightshift = GetAsyncKeyState(SCANCODE_RIGHTSHIFT);
-  shift = GetAsyncKeyState(SCANCODE_LEFTSHIFT) || GetAsyncKeyState(SCANCODE_RIGHTSHIFT);
-  ctrl = GetAsyncKeyState(SCANCODE_RIGHTCONTROL) || GetAsyncKeyState(SCANCODE_LEFTCONTROL);
-  alt = GetAsyncKeyState(SCANCODE_RIGHTALT) || GetAsyncKeyState(SCANCODE_LEFTALT);
+  rightshift = GetAsyncKeyState(VK_RSHIFT);
+  shift = GetAsyncKeyState(VK_LSHIFT) || 
+    GetAsyncKeyState(VK_RSHIFT) || 
+    GetAsyncKeyState(VK_SHIFT);
+#  if defined(WIN95PROOF)
+  rightshift = shift;
+#  endif
+  ctrl = GetAsyncKeyState(SCANCODE_RIGHTCONTROL) 
+    || GetAsyncKeyState(SCANCODE_LEFTCONTROL) 
+    || GetAsyncKeyState(VK_CONTROL);
+  alt = GetAsyncKeyState(SCANCODE_RIGHTALT) 
+    || GetAsyncKeyState(SCANCODE_LEFTALT) 
+    || GetAsyncKeyState(VK_MENU);
   /* NOTE: This is not just a hack but a really disgusting one */
 #  include "scancode.h"
 #else
@@ -275,13 +288,50 @@ int keypressed()
   return (front != end);
 }
 
+extern FILE *printerfile;
+
+#if defined(__CYGWIN__)
+
+#  define printerfilename "lpt1"
+
+static void openpr()
+{
+  if (!printerfile) {
+    printerfile = fopen(printerfilename, "a");
+  }
+}
+
 void pr(unsigned char c)
 {
-  /* FIXME */
-  FILE *p = fopen("~printer~", "a");
-  fprintf(p, "%c", c);
-  fclose(p);
+  openpr();
+  fprintf(printerfile, "%c", c);
 }
+
+#else
+
+#  define printcommand "mzprint"
+
+static void openpr()
+{
+  if (!printerfile) {
+    if (batch) printerfile = stdout;
+    else printerfile = popen(printcommand, "w");
+  }
+}
+
+void pr(unsigned char c)
+{
+  openpr();
+  fprintf(printerfile, "%c", c);
+  if (c == 12) { /* form feed */
+    if (!batch) {
+      pclose(printerfile);
+      printerfile = 0;
+    }
+  }
+}
+
+#endif
 
 int print(unsigned char c)
 {
@@ -299,7 +349,7 @@ int print(unsigned char c)
     case 0xbd: c='y'; break;  case 0xa2: c='z'; break;  case 0xb9: c=0216; break;
     case 0xa8: c=0231; break;  case 0xb2: c=0232; break;  case 0xbb: c=0204; break;
     case 0xba: c=0224; break;  case 0xad: c=0201; break;  case 0xae: c=0xe1; break;
-    case 0xff: c=0xe3; break;
+    case 0xfd: c='|'; break;  case 0xff: c=0xe3; break;
     }
   }
   pr(c);
@@ -317,15 +367,96 @@ void send_datetime()
 	  t->tm_year<1900 ? t->tm_year+1900 : t->tm_year);
 }
 
-int mztermservice(int channel, int width, int a)
+#if defined(linux)
+
+void hardcopy(int miny, int maxy, int mode)
 {
+  int x, y, k;
+  unsigned char *p = readptr;
+  /* Create a pbm file; format see `man 5 pbm'. */
+  char *pnmname = tempnam(0, "mz");
+  FILE *pnmfile = fopen(pnmname, "w");
+  fprintf(pnmfile, "P1\n");
+  fprintf(pnmfile, "# pbm file created by mz800em's hcopy command\n");
+  fprintf(pnmfile, "%d %d\n", mzbpl * 8, maxy - miny);
+  for (y = miny; y<maxy; y++) {
+    for (x = 0; x < 64; x++) fprintf(pnmfile, *p++ ? "1" : "0");
+    fprintf(pnmfile, "\n");
+    for (k = 1; k < mzbpl / 8; k++) {
+      fprintf(pnmfile, "  ");
+      for (x = 0; x < 64; x++) fprintf(pnmfile, *p++ ? "1" : "0");
+      fprintf(pnmfile, "\n");
+    }
+  }
+  fclose(pnmfile);
+  /* Write GNU `enscript' escape code to the printer */
+  openpr();
+  fprintf(printerfile, "\aepsf{pnmtops -noturn -scale %f %s|}", 
+	  mzbpl == 40 ? 1.0 : 0.78, pnmname);
+}
+#else
+void hardcopy(int miny, int maxy, int mode)
+{
+}
+#endif
+
+extern void dontpanic();
+
+int mztermservice(int channel, int width, int a, int sp)
+{
+  static int sleepcounter = 0;
   switch (channel) {
-  case 0 /* read key */: return getmzkey();
-  case 1 /* query keyboard status change */: return keypressed() ? 0 : 0xff;
+  case 0 /* read key */: 
+    {
+      int c;
+#if defined(__CYGWIN__) && defined(WIN95PROOF)
+      do_interrupt();
+#endif
+      c = getmzkey();
+#if defined(linux)
+      if (!c) {
+	pause();
+	c = getmzkey();
+      }
+#endif
+      return c;
+    }
+  case 1 /* query keyboard status change */:
+#if defined(__CYGWIN__) && defined(WIN95PROOF)
+    do_interrupt();
+#endif
+#if defined(linux)
+    pause();
+#endif
+    return keypressed() ? 4 : 0;
   case 2 /* print character */: print(a); return 0;
   case 12 /* set printer status */: printer_status = a; return 0;
   case 14 /* set date */: send_datetime(); return 0;
     /* more services see mz.pas */
+    /* following are new */
+  case 16 /* set capital mode */: scrolllock = a; return 0;
+  case 17 /* sleep for 1 ms (average) */: 
+    if (++sleepcounter == 20) {
+      usleep(20000);
+      sleepcounter = 0;
+    }
+    return 0;
+  case 18 /* hardcopy */:
+    hardcopy(0, *((unsigned char *)mempointer(0x3e05)), a);
+    return 0;
+  case 19 /* plane on/off */:
+    planeonoff((plane_struct *)mempointer(0x3ae6), a != 0x14);
+    return 0;
+  case 113 /* clear */: {
+    int endaddr = *(unsigned short *)(mempointer(sp)+2);
+    int count = *(unsigned short *)(mempointer(sp)) * 40;
+    if (endaddr >= 0x8000 && endaddr < 0xc000) 
+      clearscreen(endaddr, count, a);
+    else memset(mempointer(endaddr) - count, 0, count);
+    return 0;
+  }
+  case 255 /* quit */: 
+    dontpanic();
   }
   return 0;
 }

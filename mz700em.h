@@ -18,3 +18,4 @@ extern int coderingdowncount;
 #if !defined(USE_RAWKEY)
 extern unsigned char key_state[128];
 #endif
+extern int batch;
