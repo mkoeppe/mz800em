@@ -20,25 +20,17 @@
 
 #include "rawkey.h"
 #include <stdio.h>
-#include <curses.h>
-#include <vga.h>
 
 /* FIXME: Everything still experimental */
 
-static int pending = ERR;
-
+static int pending = EOF;
 static int rawmode = 1;
 
 void needcurses()
 {
   if (rawmode) {
-/*     rawmode_exit(); */
+    rawmode_exit(); 
     rawmode = 0;
-    /* Start curses */
-    initscr(); cbreak(); noecho();
-    nonl();
-    intrflush(stdscr, FALSE);
-    keypad(stdscr, TRUE);
   }
 }
 
@@ -47,16 +39,26 @@ int getmzkey()
   int c;
 
   needcurses();
-  if (pending!=ERR) {
+  if (pending!=EOF) {
     c = pending;
-    pending = ERR;
+    pending = EOF;
   }
   else {
-    keypad(stdscr, TRUE);
-    c = /*curses*/ getch();
+    c = getc();
+    if (c == 0x1b) { /* Esc */
+      c = getc();
+      switch (c) {
+      case '[': /* Esc [ */
+	c = getc();
+	switch (c) {
+	case '[': /* Esc [[ */
+	  c = getc();
+	  if (c >= 
+
+    }
   }
     
-  if (c == ERR) return 0;
+  if (c == EOF) return 0;
 
   /* FIXME: Conversion */
   return c;
@@ -67,10 +69,9 @@ int keypressed()
   int i;
   int c;
   needcurses();
-  if (pending != ERR) return 1;
-  keypad(stdscr, TRUE);
-  pending = getch();
-  return (pending != ERR);
+  if (pending != EOF) return 1;
+  pending = getc();
+  return (pending != EOF);
 }
 
 int mztermservice(int channel, int width)
@@ -83,21 +84,3 @@ int mztermservice(int channel, int width)
   }
 }
 
-#if 1
-int main()
-{
-  FILE *f = fopen("x~~", "a");
-  needcurses();
-  keyboard_init_return_fd();
-  vga_init();
-  vga_setmode(G320x200x256);
-  keyboard_close();
-  while(1) {
-    if (keypressed())
-      fprintf(f, "%x \n", getmzkey()); fflush(f);
-  }
-  fclose(f);
-  vga_setmode(TEXT);
-  endwin();
-}
-#endif
