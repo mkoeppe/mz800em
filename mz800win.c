@@ -116,6 +116,9 @@ void update_palette()
     logpalette.palPalEntry[i].peFlags = PC_RESERVED;
   }
   AnimatePalette(hpalette, 0, 16, logpalette.palPalEntry);
+  update_rect.top = update_rect.left = 0;
+  update_rect.right = 640, update_rect.bottom = 400;
+  refresh_screen = 1;
 }
 
 static LRESULT CALLBACK window_proc(HWND Wnd, UINT Message, 
@@ -222,61 +225,21 @@ void handle_messages(void)
 #endif
     if (msg.message == WM_QUIT) dontpanic();
     if (msg.message == WM_KEYDOWN || msg.message == WM_KEYUP 
-	|| msg.message == WM_SYSKEYUP || msg.nessage == WM_SYSKEYDOWN) /*(msg.message == WM_CHAR || msg.message == WM_DEADCHAR)*/
-      key_handler(HIWORD(msg.lParam), msg.message == WM_KEYDOWN);      
+	|| msg.message == WM_SYSKEYUP || msg.message == WM_SYSKEYDOWN) 
+      key_handler(HIWORD(msg.lParam) & 255, (msg.message == WM_KEYDOWN 
+					     || msg.message == WM_SYSKEYDOWN)); 
     DispatchMessage(&msg); 
   }
 }
 
-#if 0
-int getmzkey()
-{
-  MSG msg;
-  PeekMessage(&msg, window_handle, WM_CHAR, WM_DEADCHAR, PM_REMOVE);
-  
-}
-
-int keypressed()
-{
-  MSG msg;
-  return PeekMessage(&msg, window_handle, WM_CHAR, WM_DEADCHAR, PM_NOREMOVE);
-}
-#endif
-
 int semi_main(int argv, char **argc);
-
-DWORD CALLBACK start_routine(LPVOID lpCmdLine)
-{
-  MessageBeep(1);
-  /* Invoke emulator here */
-
-  semi_main(1, (char **) &lpCmdLine);
-
-  MessageBeep(1);
-  ExitThread(0);
-}
 
 int CALLBACK WinMain(HINSTANCE hCurrent, HINSTANCE hPrevious,
 		   LPSTR lpCmdLine, int nCmdShow)
-
 {
   hInstance = hCurrent;
-  /*  return semi_main(1, lpCmdLine);*/ /* FIXME: */
   setup_windows();
-
-#if 1
   semi_main(1, (char **) &lpCmdLine);
-#endif
-  
-#if 0
-  thread_handle = CreateThread(NULL, 64000, start_routine, lpCmdLine, 0, &thread_id);
-  {
-    MSG msg;
-    while (GetMessage(&msg, window_handle, 0, 0xFFFF)) {
-      DispatchMessage(&msg);
-    }
-  }
-#endif
   close_windows();
   return 0;
 }

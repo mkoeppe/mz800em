@@ -40,7 +40,7 @@ RAWKEYFLAGS=
 endif 
 
 ifdef DEBUG
-CFLAGS:=$(CFLAGS) -ggdb3 
+CFLAGS:=$(CFLAGS) -g
 endif
 
 CFLAGS:=$(CFLAGS) -I. $(RAWKEYFLAGS) $(Z80FLAGS)
@@ -52,6 +52,8 @@ CFLAGS:=$(CFLAGS) -I. $(RAWKEYFLAGS) $(Z80FLAGS)
 # this *looks* wrong, but *ops.c are actually #include'd by z80.c
 MZ800EM_OBJS=main.o z80.o disk.o graphics.o mzterm.o
 
+MZ800WIN_OBJS=$(MZ800EM_OBJS) mz800win.o
+
 .PHONY: all install clean tgz
 
 all: mz800em mzget mzextract
@@ -59,8 +61,20 @@ all: mz800em mzget mzextract
 z80.o: z80.c z80.h cbops.c edops.c z80ops.c
 	$(CC) -c $(CFLAGS) z80.c -o $@
 
+mz800win.o: mz800win.c mz800win.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
+mzterm.o: mzterm.c mz800win.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
+main.o: main.c mz800win.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
 mz800em: $(MZ800EM_OBJS)
-	$(CC) $(CFLAGS) -o mz800em $(MZ800EM_OBJS) -lvga $(RAWKEYLIB) -lm  
+	$(CC) $(CFLAGS) -o mz800em $(MZ800EM_OBJS) -lvga $(RAWKEYLIB) -lm
+
+mz800em.exe: $(MZ800WIN_OBJS)
+	$(CC) $(CFLAGS) -o mz800em.exe $(MZ800WIN_OBJS) -lm -mwindows
 
 mzget: mzget.o
 	$(CC) $(CFLAGS) -o mzget mzget.o
@@ -81,12 +95,14 @@ clean:
 
 #### Distribution section ####
 
+CYGFILES = mz800win.c mz800win.h scancode.h 
 
 FILES = COPYING ChangeLog Makefile README README-700 TODO BUGS		\
 	cbops.c edops.c font.txt					\
 	librawkey.a main.c mz700em.h mzextract.c mzget.c mzjoinimage	\
 	rawkey.h unpix.c z80.c z80.h z80ops.c disk.c graphics.h		\
 	graphics.c mzterm.c						\
+	$(CYGFILES)							\
 	mz800em.btx
 
 tgz: 
