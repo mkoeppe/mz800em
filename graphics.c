@@ -37,8 +37,8 @@ int SCROLL[8], OLDSCROLL[8];
 unsigned char *vptr; /* real screen buffer */
 unsigned char *vbuffer; /* virtual screen buffer */ 
 /* MZ800 colors */
-int mzcolors[16] = {0x000000, 0x000020, 0x002000, 0x002020,
-		    0x200000, 0x200020, 0x202000, 0x2a2a2a,
+int mzcolors[16] = {0x000000, 0x000030, 0x003000, 0x003030,
+		    0x300000, 0x300030, 0x303000, 0x303030,
 		    0x151515, 0x00003f, 0x003f00, 0x003f3f,
 		    0x3f0000, 0x3f003f, 0x3f3f00, 0x3f3f3f};
 int mzgrays[16] = {0x000000, 0x040404, 0x080808, 0x0c0c0c,
@@ -222,7 +222,7 @@ void update_RF(int a)
 #define SW (SCROLL[3])
 #define SSA (SCROLL[4])
 #define SEA (SCROLL[5])
-#define BCOL (SCROLL[6])
+/* #define BCOL (SCROLL[6]) */
 #define CKSW (SCROLL[7])
 
 #define OSOF1 (OLDSCROLL[1])

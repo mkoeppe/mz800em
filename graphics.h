@@ -23,6 +23,7 @@ extern int directvideo;
 extern int mzbpl;
 extern int DMD, RF, WF;
 extern int SCROLL[8];
+#define BCOL (SCROLL[6])
 extern unsigned char *vptr; /* real screen buffer */
 extern unsigned char *vbuffer; /* virtual screen buffer */ 
 extern unsigned char *readptr;
