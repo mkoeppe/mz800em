@@ -58,7 +58,9 @@ First, get a copy of the ROM from an MZ800 (see below).
 You'll also need Russell's rawkey library - a precompiled ELF copy is
 included here.
 
-After sorting the ROM out etc., do `make' and `make install'.
+After sorting the ROM out etc., do `make', then become root and do
+`make install'. The install script attempts to install mz800em SUID
+root, so that it can access the console.
 
 Be sure to read all of this README. 
 
@@ -137,9 +139,15 @@ Using mz800em
 There's no man page due to this being a really quick hack, so this'll
 have to do. Sorry. :-)
 
+Mz800em uses SVGALIB, that is, you must run it on the console. 
+
 You can quit with F10. Virtual console switching works as usual with
-Alt-Fn. The emulated MZ800 attempts to run at 3.546MHz, so if xz80 runs
-at a reasonable speed on your machine, this should too.
+Alt-Fn. 
+
+The emulated MZ800 attempts to run at 3.546MHz; the speed is
+timer-controlled. You can switch the speed control off by typing
+`mz800em -i'; on my P120 (with 48 BogoMips) the emulated MZ800 then
+runs at about 10.8MHz.
 
 The F11 key performs a RESET on the emulated Z80.
 
@@ -174,6 +182,8 @@ to connect a printer, but a special printer-port based data transfer
 works the same way it does on a real MZ. The PC printer port is
 accessed directly, and the port address is hard-wired into the
 program.
+
+MZ800 graphics, including the 640x200 modes, is supported.
 
 The 64KB RAM disk is supported.
 
@@ -259,6 +269,7 @@ Loading files
   D-BASIC MZ-2Z046:	POKE$393E,$ED,$FF,$C9 
   for lower-level
   support additionally:	POKE$3991,$21,$DF,$37,$ED,$FB,$C9
+			POKE$3810,$B7,$C9
 
   I haven't figured out how to patch other BASIC versions yet.
 
