@@ -1,3 +1,11 @@
+2002-01-21  Matthias Koeppe  <mkoeppe@mail.math.uni-magdeburg.de>
+
+	* Makefile, README, TODO, mz800gtk.c, mz800vga.c, pckey.c,
+	graphics.c, graphics.h, main.c, mz700em.h, mz800win.c, mzterm.c:
+	Factored out a lot of functions into mz800gtk.c, mz800win.c,
+	pckey.c, and mz800vga.c, saving a million #ifdefs.  Removed all
+	the buggy VGA16 code.  Started GTK+ frontend.
+
 1999-04-07  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
 
 	Version 0.7.2
