@@ -55,9 +55,6 @@ Installation
 
 First, get a copy of the ROM from an MZ800 (see below).
 
-You'll also need Russell's rawkey library - a precompiled ELF copy is
-included here.
-
 After sorting the ROM out etc., do `make', then become root and do
 `make install'. The install script attempts to install mz800em SUID
 root, so that it can access the console.
@@ -177,11 +174,11 @@ been inherited from mz700em (cf. README-700 for details), and I didn't
 try it, so maybe it doesn't even work at all in this version. There is
 no support for 800-ish sound at all.
 
-There is some experimental support for printers. I didn't actually try
-to connect a printer, but a special printer-port based data transfer
-works the same way it does on a real MZ. The PC printer port is
-accessed directly, and the port address is hard-wired into the
-program.
+There is some experimental support for printers (define
+ALLOW_LPT_ACCESS at compile time). I didn't actually try to connect a
+printer, but a special printer-port based data transfer works the same
+way it does on a real MZ. The PC printer port is accessed directly,
+and the port address is hard-wired into the program.
 
 MZ800 graphics, including the 640x200 modes, is supported.
 
