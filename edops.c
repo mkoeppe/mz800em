@@ -515,6 +515,20 @@ instr(0xbb,12);
    }
 endinstr;
 
+/** Following are not real Z80 instructions
+*** but hacks for interaction with the emulator ***/
+
+/* this (ed fa) is a multi-purpose interface, implementing a subset of
+   mzterm's services */
+instr(0xfa, 4);
+{
+  /* B is channel (service) number;
+     L is bit count;
+     returns A service result. */
+  a = mztermservice(b, l);     
+}
+endinstr;
+
 /* this (ed fb) is an alternative interface to the SHARP BASIC floppy
    sector reader/writer */
 instr(0xfb, 4);
