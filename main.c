@@ -145,7 +145,9 @@ int refresh_screen=1;
 FILE *imagefile;
 /*FILE *portfile;*/
 
+#ifdef ALLOW_LPT_ACCESS
 int funny_lpt_loopback = 0;
+#endif
 
 extern char VirtualDisks[4][1024];
 extern int VirtualDiskIsDir[4];
@@ -348,10 +350,12 @@ int main(argc,argv)
     argv+=1, argc-=1;
   }
 
+#ifdef ALLOW_LPT_ACCESS
   if(argc>=2 && strcmp(argv[1],"-l")==0) { /* "funny lpt loopback" */ 
     funny_lpt_loopback = 1;
     argv+=1, argc-=1;
   }
+#endif
 
   init_scroll();
   vga_init();
