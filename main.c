@@ -70,7 +70,6 @@ int bs_inhibit=0;
 int mz800mode=0;
 int mzbpl=40;
 int directvideo=1;
-int ignoreplane=0;
 int DMD=0;
 int WF, RF;
 int SCROLL[8], OLDSCROLL[8];
@@ -342,11 +341,6 @@ int main(argc,argv)
     argv+=1, argc-=1;
   }
 
-  if(argc>=2 && strcmp(argv[1],"-p")==0) { /* "ignore planes" */ 
-    ignoreplane = 1; /* FIXME: Should be useless, but is needed for one game */ 
-    argv+=1, argc-=1;
-  }
-
   init_scroll();
   vga_init();
 
@@ -400,7 +394,7 @@ int main(argc,argv)
     }
 
   screenon();
-  vbuffer = malloc(128*1024); /* virtual screen buffer, large enough for 640x200 at 8bit */
+  vbuffer = malloc(256*1024); /* virtual screen buffer, large enough for 2 frames of 640x200 at 8bit */
   rawmode_init();
 
 #if 0
@@ -1477,20 +1471,42 @@ playsound()
   if(interrupted<2) interrupted=1;
 }
 
+
 void graphics_write(int addr, int value)
 {
   int i;
   int x, y;
+  unsigned char colorplanes;
+  int planeb;
   unsigned char *pptr, *buffer;
+
+  if (DMD & 2) { /* 320x200x16 or 640x200x4 */
+    planeb = 0;
+    if (DMD & 4) /* 640 */ colorplanes = (WF&1) | ((WF>>1)&2);
+    else /* 320 */ colorplanes = WF & 0x0F;
+  }
+  else { /* 320x200x4 or 640x200x2 */
+    if (WF & 0x80) { /* REPLACE or PSET */
+      planeb = WF & 0x10; /* use A/B flag */
+      colorplanes = planeb ? WF>>2 : WF;
+      if (DMD & 4) /* 640 */ colorplanes &= 1;
+      else colorplanes &= 3;
+    }
+    else { /* Single, XOR, OR, or RESET */
+      planeb = WF & 0x0C; /* Ignore A/B flag */
+      colorplanes = planeb ? (WF>>2)&3 : WF&3;
+    }
+  }
+
   if (directvideo) {
-    if (WF & 16 && !ignoreplane) /* plane B */
-      pptr = vbuffer + 0x10000 + (addr - 0x8000) * 8;
+    if (planeb) /* plane B */
+      pptr = vbuffer + 0x20000 + (addr - 0x8000) * 8;
     else /* plane A */
       pptr = vptr + (addr - 0x8000) * 8;
   }
   else {
-    if (WF & 16 && !ignoreplane) /* plane B */
-      pptr = vbuffer + 0x10000 + (addr - 0x8000) * 8;
+    if (planeb) /* plane B */
+      pptr = vbuffer + 0x20000 + (addr - 0x8000) * 8;
     else { /* plane A */
       pptr = buffer = vbuffer + (addr - 0x8000) * 8;
       x = ((addr - 0x8000) % mzbpl) * 8; 
@@ -1500,32 +1516,34 @@ void graphics_write(int addr, int value)
   switch (WF >> 5) {
   case 0: /* Single write -- write to addressed planes */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr |= ((WF & 15) /* | 0x10 */);
-      else *pptr &=~ (WF & 15);
+      if (value & 1) *pptr |= colorplanes;
+      else *pptr &=~ colorplanes;
     break;
   case 1: /* XOR */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr ^= (WF & 15);
+      if (value & 1) *pptr ^= colorplanes;
     break;
   case 2: /* OR */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr |= ((WF & 15) /* | 0x10 */);
+      if (value & 1) *pptr |= colorplanes;
     break;
   case 3: /* RESET */
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr &=~ (WF & 15);
+      if (value & 1) *pptr &=~ colorplanes;
     break;
   case 4: /* REPLACE */
+  case 5:
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr = (WF & 15) /* | 0x10 */;
-      else *pptr = 0 /*0x10*/;
+      if (value & 1) *pptr = colorplanes;
+      else *pptr = 0;
     break;
   case 6: /* PSET */
+  case 7:
     for (i = 0; i<8; i++, pptr++, value >>= 1)
-      if (value & 1) *pptr = (WF & 15) /* | 0x10 */;
+      if (value & 1) *pptr = colorplanes;
     break;
   }
-  if (!directvideo && !(WF & 16 && !ignoreplane)) {
+  if (!directvideo && !planeb) {
     vga_drawscansegment(buffer, x, y, 8);
   }
 }
@@ -1535,23 +1553,46 @@ int graphics_read(int addr)
   int i;
   unsigned char *pptr;
   int result = 0;
-  if (directvideo && !(RF & 16)) {
+  int planeb;
+  unsigned char colorplanes;
+  unsigned char colormask;
+
+  switch (DMD & 6) {
+  case 0: colormask = 3; break;
+  case 2: colormask = 15; break;
+  case 4: colormask = 1; break;
+  case 6: colormask = 3; 
+  }
+
+  if (DMD & 2) { /* 320x200x16 or 640x200x4 */
+    planeb = 0;
+    if (DMD & 4) colorplanes = (RF&1) | ((RF>>1)&2);
+    else colorplanes = RF;
+  }
+  else { /* 320x200x4 or 640x200x2 */
+    planeb = RF & 0x10; /* use A/B flag */
+    colorplanes = planeb ? RF>>2 : RF;
+  }
+  colorplanes &= colormask;
+
+  if (directvideo && !planeb) {
     pptr = vptr + (addr - 0x8000) * 8;
   }
   else {
-    if (RF & 16 && !ignoreplane) /* plane B */
-      pptr = vbuffer + 0x10000 + (addr - 0x8000) * 8;
+    if (planeb) /* plane B */
+      pptr = vbuffer + 0x20000 + (addr - 0x8000) * 8;
     else /* plane A */
       pptr = vbuffer + (addr - 0x8000) * 8;
   }
+
   switch (RF >> 7) {
   case 0: /* READ */
     for (i = 0; i<8; i++, pptr++, result>>=1)
-      if (*pptr & (RF & 15)) result |= 0x100;
+      if (*pptr & colorplanes) result |= 0x100;
     return result;
   case 1: /* FIND */
     for (i = 0; i<8; i++, pptr++, result>>=1)
-      if ((*pptr) & 15 == (RF & 15)) result |= 0x100;
+      if ((*pptr & colormask) == colorplanes) result |= 0x100;
     return result;
   }
 }
