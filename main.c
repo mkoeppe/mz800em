@@ -362,8 +362,9 @@ int main(argc,argv)
   mem[ROM800_START+0x800] = 0xB7; /* make 800 ROM invisible to the 700 Monitor */
 #endif
 
-  /* hack rom load routine to call loader() (see end of edops.c for details) */
+  /* hack rom load routines to call loader() (see end of edops.c for details) */
   mem[ROM_START+0x0111]=0xed; mem[ROM_START+0x0112]=0xfc;
+  mem[ROM800_START+0xB4C]=0xdd; mem[ROM800_START+0xB4D]=0xed; mem[ROM800_START+0xB4E]=0xfc;
 
   /* hack IPL disk load routine to call diskloader() */
   mem[ROM800_START+0x5A7] = 0xed; mem[ROM800_START+0x5A8] = 0xfd; 
@@ -1395,7 +1396,7 @@ do_interrupt()
 }
 
 
-int loader()
+int loader(int addr)
 {
   FILE *in;
   unsigned char buf[128],*ptr;
@@ -1430,7 +1431,7 @@ int loader()
 	  start=buf[0x14]+256*buf[0x15];
 	  len  =buf[0x12]+256*buf[0x13];
 	  memcpy(mem+RAM_START+0x10F0,buf,0x80);
-    
+	  if (addr) start = addr; /* Mz800-ish L */
 	  fread(mem+RAM_START+start,1,len,in);	/* read the rest */
 	  fclose(in);
 	}

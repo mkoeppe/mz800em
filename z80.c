@@ -95,6 +95,7 @@ word16 _hlixiy[3];
                   (iy=(iy&0xff00)|(x)))
 # define fetchpc fetch(pc)
 # define fetch2pc fetch2(pc)
+# define pc_ pc
 #endif
 
 mainloop(unsigned short initial_pc, unsigned short initial_sp)

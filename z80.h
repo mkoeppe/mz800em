@@ -37,7 +37,7 @@ extern volatile int interrupted;
 extern volatile int intvec;
 extern int forceok;
 
-extern int loader();
+extern int loader(int);
 extern int diskloader(void *);
 extern int cmthandler(int address, int length, int what);
 extern int basicfloppyhandler(int address, int length, 

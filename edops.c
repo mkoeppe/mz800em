@@ -634,10 +634,18 @@ endinstr;
 /* this (ed fc) is put at 0111h in the ROM to patch the L command */
 instr(0xfc,4);
    {
-   if(loader())
-     f=0,pc=0x126;
-   else
-     f=1,pc=0x114;
+     if (ixoriy) { /* MZ800 ROM L command */
+       if (loader(0x1200))
+	 f=0, pc_=0xE9A4;
+       else
+	 f=1, pc_=0xEB24;
+     }
+     else {
+       if(loader(0))
+	 f=0,pc=0x126;
+       else
+	 f=1,pc=0x114;
+     }
    }
 endinstr;
 
