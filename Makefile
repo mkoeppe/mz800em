@@ -41,5 +41,5 @@ FILES = COPYING ChangeLog Makefile README README-700 TODO cbops.c edops.c font.t
 	rawkey.h unpix.c z80.c z80.h z80ops.c disk.c graphics.h graphics.c
 
 tgz: 
-	tar cfz mz800em-0.4.tar.gz $(FILES)
+	tar cfz mz800em-0.3.tar.gz $(FILES)
 
