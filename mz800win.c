@@ -244,7 +244,7 @@ void handle_messages(void)
     if (msg.message == WM_QUIT) dontpanic();
     if (msg.message == WM_KEYDOWN || msg.message == WM_KEYUP 
 	|| msg.message == WM_SYSKEYUP || msg.message == WM_SYSKEYDOWN) 
-      key_handler(HIWORD(msg.lParam) & 255, (msg.message == WM_KEYDOWN 
+      key_handler(HIWORD(msg.lParam) & 511, (msg.message == WM_KEYDOWN 
 					     || msg.message == WM_SYSKEYDOWN)); 
     if (msg.message == WM_TIMER) sighandler(1);
     DispatchMessage(&msg); 

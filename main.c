@@ -1019,6 +1019,10 @@ unsigned int out(h,l,a)
       update_palette();
       return (ts);
 
+    case 0xf2: /* SN76489N (programmable sound generator) */
+      /* TODO: use EMULib to support the SN76489N */
+      return ts;
+
     case 0xfc: /* Z80PIO Channel A Control */
     case 0xfd: /* Z80PIO Channel B Control */
       
