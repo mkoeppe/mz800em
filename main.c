@@ -69,7 +69,7 @@ int countsec=0;
 int bs_inhibit=0;
 int mz800mode=0;
 int mzbpl=40;
-int directvideo=0;
+int directvideo=1;
 int DMD=0;
 int WF, RF;
 int SCROLL[8], OLDSCROLL[8];
@@ -121,9 +121,12 @@ unsigned char vidmem_old[4096];
 int refresh_screen=1;
 
 FILE *imagefile;
-FILE *portfile;
+/*FILE *portfile;*/
 
 int funny_lpt_loopback = 0;
+
+extern char VirtualDisks[4][1024];
+extern int VirtualDiskIsDir[4];
 
 /* MZ700 colors */
 #ifdef PROPER_COLOURS
@@ -139,8 +142,14 @@ int mzcolors[16] = {0x000000, 0x000020, 0x002000, 0x002020,
 		    0x200000, 0x200020, 0x202000, 0x2a2a2a,
 		    0x151515, 0x00003f, 0x003f00, 0x003f3f,
 		    0x3f0000, 0x3f003f, 0x3f3f00, 0x3f3f3f};
+int mzgrays[16] = {0x000000, 0x040404, 0x080808, 0x0c0c0c,
+		   0x181818, 0x1c1c1c, 0x282828, 0x303030,
+		   0x101010, 0x141414, 0x202020, 0x242424,
+		   0x2c2c2c, 0x343434, 0x383838, 0x3c3c3c};
+		   
 int palette[4];
 int palette_block;
+int blackwhite = 0;
 
 int pending_timer_interrupts;
 int pending_vbln_interrupts;
@@ -313,6 +322,7 @@ int main(argc,argv)
   int tmp;
   int f;
   unsigned short initial_pc = 0;
+  int imagecnt = 0;
 
   if(argc>=3 && strcmp(argv[1],"-t")==0) { /* "timer" */ 
     sscanf(argv[2], "%d", &ints_per_second);
@@ -451,6 +461,15 @@ int main(argc,argv)
     cont1 = 10; cont2 = 1; /* FIXME */ 
     set8253timer();
   }
+  
+  /* Init virtual disks */
+  { 
+    int i;
+    for (i = 0; i<4; i++) {
+      strcpy(VirtualDisks[i], ".");
+      VirtualDiskIsDir[i] = 1;
+    }
+  }
 
   /* load RAM image */
   if (argc>=2) {
@@ -466,6 +485,9 @@ int main(argc,argv)
 	  imagefile = in;
 	  initial_pc = 0xE800; /* Use IPL to load the image */
 	  ret=0;
+	  imagecnt = 1; /* also use this image as BASIC image */
+	  strcpy(VirtualDisks[0], argv[1]);
+	  VirtualDiskIsDir[0] = 0;
 	}
 	else {  /* Read MZ File */
 	  fread(buf,1,0x80,in);			/* read header */
@@ -492,6 +514,18 @@ int main(argc,argv)
   cmtlist = argv + 1;
   cmtcount = argc - 1;
   cmtcur = 0;
+
+  /* Also interpret the first four remaining arguments as BASIC disk
+     images or virtual-disk directories */
+  {
+    int i;
+    struct stat s;
+    for (i = imagecnt; i<4 && argc > 1; i++, argc--, argv++) {
+      strncpy(VirtualDisks[i], argv[1], 1024);
+      stat(argv[1], &s);
+      VirtualDiskIsDir[i] = S_ISDIR(s.st_mode);
+    }
+  }
 
   mainloop(initial_pc, /* initial_sp (for snap loads) */ 0x10F0);
 
@@ -707,6 +741,9 @@ unsigned int out(h,l,a)
 	DMD = a & 7;
 	if (old_mz800mode != mz800mode) {
 	  if (mz800mode) {
+	    memptr[13] = mem + RAM_START + 0xd000; memattr[13] = 1;
+	    memptr[14] = mem + RAM_START + 0xe000; memattr[14] = 1;
+	    memptr[15] = mem + RAM_START + 0xf000; memattr[15] = 1;
 	  }
 	  else refresh_screen = 1;
 	  update_palette();
@@ -1123,6 +1160,12 @@ update_scrn()
   refresh_screen=0;
 }
 
+void toggle_blackwhite()
+{
+  blackwhite = !blackwhite;
+  update_palette();
+}
+
 update_kybd()
 {
   int y;
@@ -1139,6 +1182,12 @@ update_kybd()
     {
       while(is_key_pressed(FUNC_KEY(11))) { usleep(20000); scan_keyboard(); };
       reset();	/* F11 = reset */
+    }
+
+  if(is_key_pressed(FUNC_KEY(12)))
+    {
+      while(is_key_pressed(FUNC_KEY(12))) { usleep(20000); scan_keyboard(); };
+      toggle_blackwhite(); 
     }
 
   for(y=0;y<10;y++) keyports[y]=0;
@@ -1582,12 +1631,13 @@ void update_palette()
 {
   int i;
   int color;
+  int *colors = blackwhite ? mzgrays : mzcolors;
   for (i = 0; i < 16; i++) {
     if (mz800mode) {
-      if ((i >> 2) == palette_block) color = mzcolors[palette[i & 3]];
-      else color = mzcolors[i];
+      if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
+      else color = colors[i];
     }
-    else color = mzcolors[i];
+    else color = colors[i];
     vga_setpalette(i,
 		   (color >> 8) & 63, (color >> 16) & 63, color & 63);
   }
