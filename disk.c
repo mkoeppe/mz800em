@@ -314,7 +314,7 @@ typedef struct { /* See 5Z008: 35AA */
 int basicfloppyhandler2(int tableaddress)
 {
   DriverData *D = (DriverData *) (mem+RAM_START+tableaddress);
-  if (!D->read) exit(1);
+/*   if (!D->read) exit(1); */
   return basicfloppyhandler(D->address, (int)D->sectorcount * 256 - 256 + D->bytecount,
 			    D->track*16 + D->sector - 1, D->driveandmode&3, !D->read);
 }
