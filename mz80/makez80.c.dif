@@ -1,0 +1,181 @@
+47a48,52
+> /* Patched by Matthias K"oppe <mkoeppe@cs.uni-magdeburg.de> for
+>    proper 16-bit OTDR (and the like) instructions. */
+> 
+> /* Version with optional direct memory access (-dm) */
+> 
+53c58
+< #define	VERSION 					"2.6"
+---
+> #define	VERSION 					"2.6p2"
+83a89
+> UINT8 bDirectMemory = FALSE;
+1350a1357,1360
+>   if (FALSE == bDirectMemory) {
+>     
+>     // Traditional implementation: Use lookup table
+> 
+1444a1455,1527
+>   }
+>   else {
+> 
+>     // Direct-memory implementation: We don't do lookups but simply
+>     // write to the memory directly (only for 64K unmapped machines)
+> 
+> 	// First off, load our byte to write into al after we've saved AF
+> 
+> 	if (strcmp(pszValue, "[esi]") == 0	// Immediate value?
+> 	    || ((strcmp(pszAddress, "[_z80de]") == 0
+> 		 || strcmp(pszAddress, "[_orgval]") == 0
+> 		 || strcmp(pszAddress, "[_z80ix]") == 0
+> 		 || strcmp(pszAddress, "[_z80iy]") == 0)
+> 		&& strcmp(pszValue, "al") != 0)) {
+> 	  fprintf(fp, "		mov	[_z80af], ax	; Store AF\n");
+> 	  fprintf(fp, "		mov	al, %s	; And our data to write\n", pszValue);
+> 	  if (strcmp(pszValue, "[esi]") == 0)
+> 	    fprintf(fp, "		inc	esi	; Increment our program counter\n");
+> 	}
+> 
+> 	// Now get the address in DX - regardless of what it is
+> 
+> 	if (strcmp(pszAddress, "[_z80de]") == 0 ||
+> 		 strcmp(pszAddress, "[_orgval]") == 0 ||
+> 		 strcmp(pszAddress, "[_z80ix]") == 0 ||
+> 		 strcmp(pszAddress, "[_z80iy]") == 0)
+> 		fprintf(fp, "		mov	dx, %s\n", pszAddress);
+> 
+> 	fprintf(fp, "memoryWrite%ld:\n", dwGlobalLabel);
+> 
+> 	if (strcmp(pszValue, "[esi]") == 0)
+> 		fprintf(fp, "		mov	[ebp + e%s], al	; Store our direct value\n", pszAddress);
+> 	else
+> 	{
+> 		if (pszValue[0] == 'b' && pszValue[1] == 'y' && pszValue[2] == 't')
+> 		{
+> 			fprintf(fp, "		mov	edi, edx\n");
+> 			assert(strcmp(pszValue, "dl") != 0);
+> 
+> 			fprintf(fp, "		mov	dl, %s\n", pszValue);
+> 
+> 			if (strcmp(pszAddress, "dx") == 0)
+> 				fprintf(fp, "		mov	[ebp + edi], dl\n");
+> 			else
+> 				fprintf(fp, "		mov	[ebp + e%s], dl\n", pszAddress);
+> 
+> 			fprintf(fp, "		mov	edx, edi\n");
+> 		}
+> 		else
+> 		{
+> 			if (strcmp(pszAddress, "[_z80de]") != 0 &&
+> 				 strcmp(pszAddress, "[_orgval]") != 0 &&
+> 				 strcmp(pszAddress, "[_z80ix]") != 0 &&
+> 				 strcmp(pszAddress, "[_z80iy]") != 0)
+> 				fprintf(fp, "		mov	[ebp + e%s], %s\n", pszAddress, pszValue);
+> 			else
+> 				fprintf(fp, "		mov	[ebp + edx], al\n");
+> 		}
+> 	}
+> 
+> 	if (strcmp(pszValue, "[esi]") == 0 
+> 	    || ((strcmp(pszAddress, "[_z80de]") == 0
+> 		 || strcmp(pszAddress, "[_orgval]") == 0
+> 		 || strcmp(pszAddress, "[_z80ix]") == 0
+> 		 || strcmp(pszAddress, "[_z80iy]") == 0)
+> 		&& strcmp(pszValue, "al") != 0)) {
+> 	  fprintf(fp, "		mov	ax, [_z80af] ; Get our accumulator and flags\n");
+> 	}
+> 
+> 	fprintf(fp, "WriteMacroExit%ld:\n", dwGlobalLabel);
+> 
+> 	++dwGlobalLabel;
+>   }
+1482a1566,1605
+>   if (bDirectMemory) {
+> 	fprintf(fp, "		mov	edi, [_z80MemRead]	; Point to the read array\n\n", cpubasename);
+> 	fprintf(fp, "checkLoop%ld:\n", dwGlobalLabel);
+> 	fprintf(fp, "		cmp	[edi], word 0ffffh ; End of the list?\n");
+> 	fprintf(fp, "		je		memoryRead%ld\n", dwGlobalLabel);
+> 	fprintf(fp, "		cmp	%s, [edi]	; Are we smaller?\n", pszAddress);
+> 	fprintf(fp, "		jb		nextAddr%ld		; Yes, go to the next address\n", dwGlobalLabel);
+> 	fprintf(fp, "		cmp	%s, [edi+4]	; Are we bigger?\n", pszAddress);
+> 	fprintf(fp, "		jbe	callRoutine%ld\n\n", dwGlobalLabel);
+> 	fprintf(fp, "nextAddr%ld:\n", dwGlobalLabel);
+> 	fprintf(fp, "		add	edi, 10h		; Next structure!\n");
+> 	fprintf(fp, "		jmp	short checkLoop%ld\n\n", dwGlobalLabel);
+> 	fprintf(fp, "callRoutine%ld:\n", dwGlobalLabel);
+> 
+> 	if (strcmp(pszAddress, "dx") != 0)
+> 		fprintf(fp, "		mov	dx, %s	; Get our address\n", pszAddress);
+> 
+> 	fprintf(fp, "		call	ReadMemoryByte	; Standard read routine\n");
+> 
+> 	// Yes, these are intentionally reversed!
+> 
+> 	if (strcmp(pszTarget, "al") == 0)
+> 		fprintf(fp, "		mov	[_z80af], al	; Save our new accumulator\n");
+> 	else
+> 	if (strcmp(pszTarget, "ah") == 0)
+> 		fprintf(fp, "		mov	[_z80af + 1], al	; Save our new flags\n");
+> 	else
+> 		fprintf(fp, "		mov	%s, al	; Put our returned value here\n", pszTarget);
+> 
+> 	// And are properly restored HERE:
+> 
+> 	fprintf(fp, "		mov	ax, [_z80af]	; Get our AF back\n");
+> 
+> 	// Restore registers here...
+> 
+> 	fprintf(fp, "		jmp	short readExit%ld\n\n", dwGlobalLabel);
+> 
+> }
+>   else {
+> 
+1517a1641,1642
+>   }
+> 
+2749a2875,2878
+> 	// First we decrement B
+> 
+> 	fprintf(fp, "		dec	ch	; Decrement B (of C)\n");
+> 
+2753c2882,2883
+< 	fprintf(fp, "		xor	ch, ch ; Not 16 bit for this instruction\n");
+---
+> 	if (b16BitIo == FALSE)
+> 		fprintf(fp, "		xor	ch, ch ; We want 8 bit ports\n");
+2765,2767c2895
+< 	// Now we decrement B
+< 
+< 	fprintf(fp, "		dec	ch	; Decrement B (of C)\n");
+---
+> 	fprintf(fp, "		or	ch, ch	; Set zero according to B value\n");
+2798a2927,2930
+> 	// Now we decrement B
+> 
+> 	fprintf(fp, "		dec	ch	; Decrement B (of C)\n");
+> 
+2804c2936,2937
+< 	fprintf(fp, "		xor	ch, ch	; No 16 bit for this instruction!\n");
+---
+> 	if (b16BitIo == FALSE)
+> 		fprintf(fp, "		xor	ch, ch ; We want 8 bit ports\n");
+2814,2816c2947
+< 	// Now we decrement B
+< 
+< 	fprintf(fp, "		dec	ch	; Decrement B (of C)\n");
+---
+> 	fprintf(fp, "		or	ch, ch	; Set zero according to B value\n");
+3830a3962,3963
+> #if 0
+> 	// these globals cause name-space problems
+3838a3972
+> #endif
+4988a5123,5124
+> 		if (strcmp("-dm", argv[dwLoop]) == 0)
+> 			bDirectMemory = TRUE;
+5006c5142,5144
+< 	strcpy(cpubasename, "mz80");
+---
+> 	if (bDirectMemory)
+> 	  strcpy(cpubasename, "mz80f");
+> 	else strcpy(cpubasename, "mz80");

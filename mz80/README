@@ -1,0 +1,12 @@
+This directory contains the unmodified `mz80' (`Multi-Z80 CPU
+emulator') sources, version 2.6, taken from
+
+	ftp://ftp.synthcom.com/pub/emulators/cpu/makez80.zip
+
+`mz80' is copr. Neil Bradley (neil@synthcom.com); see `mz80.txt' for
+details on copyright and license. `mz80' is distributed in unmodified
+form in accordance with its licensing conditions.
+
+This directory also contains a patch `makez80.c.dif', which is
+required to make `mz80' work with `mz800em', and a `Makefile'. Both
+are copr. Matthias K"oppe (mkoeppe@cs.uni-magdeburg.de).
