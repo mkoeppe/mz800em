@@ -28,9 +28,6 @@ Cygwin: Add proper timing. Fix palette problem. Let the process pause
 if window is not active, or if it is waiting for mzterm-ish keyboard
 input. 
 
-GNU/Linux: Finish the `VGA16' mode of doing graphics; this should
-improve speed on my slow VGA computer, especially in 640x200 mode.
-
 Add support for the SHARP MZ-900 series, a Z80 machine running at
 12MHz, compatible with the MZ-800 series, but featuring 2 pages of
 640x200 graphics at 16 colors (4 planes), mapped at addresses

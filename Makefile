@@ -2,6 +2,10 @@
 
 VERSION=0.7.2
 
+FAST=1
+
+#VIDEOFLAGS=-DHAVE_640X480X256
+
 ifdef FAST
 
 # This will make the Z80 kernel faster, BUT you will lose speed
@@ -17,7 +21,8 @@ CFLAGS:=$(CFLAGS) -O9 -mpentium -march=pentium \
 	-bi586-pc-linux-gnu \
 	-fno-exceptions
 else
-CFLAGS:=$(CFLAGS) -O9 -m486 -Wall
+#CFLAGS:=$(CFLAGS) -O9 -mpentium -Wall
+CFLAGS:=$(CFLAGS) -Wall
 endif
 
 PRINTFLAGS=-DPRINT_INVOKES_ENSCRIPT
@@ -27,7 +32,6 @@ Z80FLAGS=-DCOPY_BANKSWITCH -DHEAVY_LOAD -DSLOPPY_2 -DUSE_REGS \
 	-DNO_COUNT_TSTATES -DRISKY_REGS -DWIN95PROOF \
 	 -DDELAYED_UPDATE -DTWO_Z80_COPIES $(PRINTFLAGS)
 
-#	-DVGA16
 
 else
 
@@ -60,7 +64,7 @@ ifdef DEBUG
 CFLAGS:=$(CFLAGS) -g
 endif
 
-CFLAGS:=$(CFLAGS) -I. $(RAWKEYFLAGS) $(Z80FLAGS)
+CFLAGS:=$(CFLAGS) -I. $(INCLUDE) $(RAWKEYFLAGS) $(Z80FLAGS) $(VIDEOFLAGS)
 
 
 #### Targets ####
@@ -83,7 +87,11 @@ endif
 
 MZ800EM_OBJS=$(Z80_OBJS) main.o disk.o graphics.o mzterm.o
 
-MZ800WIN_OBJS=$(MZ800EM_OBJS) mz800win.o
+MZ800VGA_OBJS=$(MZ800EM_OBJS) mz800vga.o pckey.o
+
+MZ800WIN_OBJS=$(MZ800EM_OBJS) mz800win.o pckey.o
+
+MZ800GTK_OBJS=$(MZ800EM_OBJS) mz800gtk.o
 
 .PHONY: all install clean tgz
 
@@ -101,8 +109,16 @@ mzterm.o: mzterm.c mz800win.h
 main.o: main.c mz800win.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
-mz800em: $(MZ800EM_OBJS)
-	$(CC) $(CFLAGS) -o mz800em $(MZ800EM_OBJS) -lvga $(RAWKEYLIB) -lm
+GTKCFLAGS=`gtk-config --cflags`
+
+mz800gtk.o: mz800gtk.c 
+	$(CC) -c $(CFLAGS) $(GTKCFLAGS) $< -o $@
+
+mz800em: $(MZ800VGA_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(MZ800VGA_OBJS) -lvga $(RAWKEYLIB) -lm
+
+gmz800em: $(MZ800GTK_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(MZ800GTK_OBJS) `gtk-config --libs`
 
 mz800em.exe: $(MZ800WIN_OBJS)
 	$(CC) $(CFLAGS) -o mz800em.exe $(MZ800WIN_OBJS) -lm -mwindows
