@@ -38,6 +38,7 @@ static int ok = 0;
 static int capslock = 0, numlock = 0, scrolllock = 0;
 static int shift = 0, ctrl = 0, alt = 0, rightshift = 0;
 static int printer_status = 4;
+static int pending = 0;
 
 static void needconsole()
 {
@@ -60,7 +61,9 @@ static void needconsole()
 int getmzkey()
 {
   int c, ext;
-  
+#if defined(__CYGWIN__)
+  if (GetFocus() != window_handle) return 0;
+#endif
   needconsole();
 
   if (is_key_pressed(SCANCODE_RIGHTSHIFT) && is_key_pressed(SCANCODE_RIGHTCONTROL) /* mzterm-ish */
@@ -82,7 +85,13 @@ int getmzkey()
     }
     return 0;
   }
-
+  
+  if (pending) {
+    int r = pending; 
+    pending = 0;
+    return r;
+  }
+    
   if (front == end) return 0;
   
   c = codering[front];
@@ -242,9 +251,7 @@ int getmzkey()
   case SCANCODE_KEYPADPERIOD:
   case SCANCODE_REMOVE: 
     if (ctrl) return 0x16;
-    front = (front - 1) % CODERINGSIZE;
-    codering[front] = SCANCODE_BACKSPACE;
-    coderingdowncount++;
+    pending = 0x10; /* backspace */
     return 0x13;
     
   case SCANCODE_CURSORUPLEFT:
@@ -288,7 +295,7 @@ int getmzkey()
 int keypressed()
 {
   needconsole();
-  return (front != end);
+  return pending || (front != end);
 }
 
 extern FILE *printerfile;
@@ -316,7 +323,11 @@ void pr(unsigned char c)
 
 #else /* PRINT_INVOKES_ENSCRIPT */
 
-#  define printcommand "mzprint"
+#  if defined(__CYGWIN__)
+#    define printcommand "./mzprintw"
+#  else
+#    define printcommand "mzprint"
+#endif
 
 static void openpr()
 {
@@ -345,7 +356,20 @@ int print(unsigned char c)
   if (printer_status & 4) {
     (*mempointer(0x1095))++; /* column counter */
     switch(c) {
-    case 0x0D: pr(0x0D);
+#if defined(__CYGWIN__)
+      /* Cygwin tools seem to have funny problems with NUL chars */
+      case 0x00:
+	pr(' ');
+	return;
+	/* More kludges */
+      case 0x0f:
+	pr(0x1b); pr('g');
+	return;
+      case 0x12:
+	pr(0x1b); pr('h');
+	return;
+#endif
+      case 0x0D: pr(0x0D);
 #if !defined(MZISHPRINTER)
       pr(0x0A);
 #endif
@@ -362,7 +386,8 @@ int print(unsigned char c)
     case 0xbd: c='y'; break;  case 0xa2: c='z'; break;  case 0xb9: c=0216; break;
     case 0xa8: c=0231; break;  case 0xb2: c=0232; break;  case 0xbb: c=0204; break;
     case 0xba: c=0224; break;  case 0xad: c=0201; break;  case 0xae: c=0xe1; break;
-    case 0xfd: c='|'; break;  case 0xff: c=0xe3; break;
+    case 0xfd: c='|'; break;  case 0xff: c=0xe3; break; case 0xbe: c='{'; break;
+    case 0x80: c='}'; break; case 0x94: c='~'; break;
     }
   }
   pr(c);
