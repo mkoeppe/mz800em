@@ -21,226 +21,231 @@
 #include <stdio.h>
 #include <vgakeyboard.h>
 
-/* FIXME: Everything still experimental */
+/* You need a special patched version of the DBASIC interpreter to use 
+   the services provided in this file. */
 
-#if 0
-void x()
-{
-  int shift = 1, ctrl = 1;
-
-  /* byte 8 */
-    if(is_key_pressed(LEFT_SHIFT))		shift = 1;
-    if(is_key_pressed(RIGHT_SHIFT))		shift = 1;
-    if(is_key_pressed(LEFT_CTRL))		ctrl = 1;
-    if(is_key_pressed(BACKSPACE))		{;	/* break */}
-
-    if(is_key_pressed(CURSOR_LEFT))		keyports[7]|=0x04;
-    if(is_key_pressed(CURSOR_RIGHT))	        keyports[7]|=0x08;
-    if(is_key_pressed(CURSOR_DOWN))		keyports[7]|=0x10;
-    if(is_key_pressed(CURSOR_UP))		keyports[7]|=0x20;
-    if(is_key_pressed(DELETE_KEY))		keyports[7]|=0x40;
-    if(is_key_pressed(INSERT_KEY))		keyports[7]|=0x80;
-
-    if(is_key_pressed(FUNC_KEY(5)))		keyports[9]|=0x08;
-    if(is_key_pressed(FUNC_KEY(4)))		keyports[9]|=0x10;
-    if(is_key_pressed(FUNC_KEY(3)))		keyports[9]|=0x20;
-    if(is_key_pressed(FUNC_KEY(2)))		keyports[9]|=0x40;
-    if(is_key_pressed(FUNC_KEY(1)))		keyports[9]|=0x80;
-
-    /* first row */
-
-    if(is_key_pressed(scancode['`'])) {
-      if (keyports[8] & 1) { /* Shift+` */
-      }
-      else keyports[6]|=0x40; /* ^ */
-    }
-    if(is_key_pressed(scancode['8'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+8 is [ */
-	keyports[1]|=0x10;
-      }
-      else keyports[5]|=0x01;
-    }
-    if(is_key_pressed(scancode['7'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+7 is { */
-	keyports[1]|=0x10;
-	keyports[8]|=1;
-      } else if (keyports[8] & 1) { /* Shift 7 is / */ 
-	keyports[7]|=0x01;
-	keyports[8]&=~1;
-      }
-      else keyports[5]|=0x02;
-    }
-    if(is_key_pressed(scancode['6']))	keyports[5]|=0x04;
-    if(is_key_pressed(scancode['5']))	keyports[5]|=0x08;
-    if(is_key_pressed(scancode['4']))	keyports[5]|=0x10;
-    if(is_key_pressed(scancode['3']))	keyports[5]|=0x20;
-    if(is_key_pressed(scancode['2']))	keyports[5]|=0x40;
-    if(is_key_pressed(scancode['1']))	keyports[5]|=0x80;
-
-    if(is_key_pressed(scancode['9'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+9 is ] */
-	keyports[1]|=0x08;
-      }
-      else keyports[6]|=0x04; 
-    }
-    
-    if (is_key_pressed(scancode['0'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+0 is } */
-	keyports[1]|=0x08;
-	keyports[8]|=1;
-      }
-      else if (keyports[8] & 1) { /* Shift+0 is = */
-	keyports[6]|=0x20;
-	keyports[8]|=1;
-      }
-      else keyports[6]|=0x08; 
-    }
-
-    if(is_key_pressed(scancode['-'])) {
-      if (is_key_pressed(LEFT_ALT)) { /* Alt+- is \ */
-	keyports[6]|=0x80;
-      }
-      else if (keyports[8] & 1) { /* Shift+- is ? */
-	keyports[7]|=0x02;	
-	keyports[8]&=~1;
-      }
-      else { /* sz */
-	keyports[1]|=0x10;
-	keyports[8]|=1;
-      }
-    }
-
-    /* letter keys */
-
-    if(is_key_pressed(scancode['x']))	keyports[2]|=0x01;
-    if(is_key_pressed(scancode['w']))	keyports[2]|=0x02;
-    if(is_key_pressed(scancode['v']))	keyports[2]|=0x04;
-    if(is_key_pressed(scancode['u']))	keyports[2]|=0x08;
-    if(is_key_pressed(scancode['t']))	keyports[2]|=0x10;
-    if(is_key_pressed(scancode['s']))	keyports[2]|=0x20;
-    if(is_key_pressed(scancode['r']))	keyports[2]|=0x40;
-    if(is_key_pressed(scancode['q'])) {
-      if (is_key_pressed(LEFT_ALT)) {
-	keyports[1]|=0x20; /* Alt+Q is @ */
-      }
-      else keyports[2]|=0x80;
-    }
-    if(is_key_pressed(scancode['p']))	keyports[3]|=0x01;
-    if(is_key_pressed(scancode['o']))	keyports[3]|=0x02;
-    if(is_key_pressed(scancode['n']))	keyports[3]|=0x04;
-    if(is_key_pressed(scancode['m']))	keyports[3]|=0x08;
-    if(is_key_pressed(scancode['l']))	keyports[3]|=0x10;
-    if(is_key_pressed(scancode['k']))	keyports[3]|=0x20;
-    if(is_key_pressed(scancode['j']))	keyports[3]|=0x40;
-    if(is_key_pressed(scancode['i']))	keyports[3]|=0x80;
-    if(is_key_pressed(scancode['h']))	keyports[4]|=0x01;
-    if(is_key_pressed(scancode['g']))	keyports[4]|=0x02;
-    if(is_key_pressed(scancode['f']))	keyports[4]|=0x04;
-    if(is_key_pressed(scancode['e']))	keyports[4]|=0x08;
-    if(is_key_pressed(scancode['d']))	keyports[4]|=0x10;
-    if(is_key_pressed(scancode['c']))	keyports[4]|=0x20;
-    if(is_key_pressed(scancode['b']))	keyports[4]|=0x40;
-    if(is_key_pressed(scancode['a']))	keyports[4]|=0x80;
-    if(is_key_pressed(scancode['y']))	keyports[1]|=0x40;
-    if(is_key_pressed(scancode['z']))	keyports[1]|=0x80;
-
-    /* lowest row */
-
-    if(is_key_pressed(scancode['.'])) {
-      if (keyports[8] & 1) { /* Shift+. is : */
-	keyports[0]|=0x02;
-	keyports[8]&=~1;
-      }
-      else keyports[6]|=0x01;
-    }
-    if(is_key_pressed(scancode[','])) {
-      if (keyports[8] & 1) { /* Shift+, is ; */
-	keyports[0]|=0x04;
-	keyports[8]&=~1;
-      }
-      else keyports[6]|=0x02;
-    }
-    if(is_key_pressed(scancode['/'])) {
-      if (keyports[8] & 1) { /* Shift+- is _ */
-      }
-      else keyports[6]|=0x20; /* - */
-    }
-
-    /* special keys */
-
-    if(is_key_pressed(ENTER_KEY))	keyports[0]|=0x01;
-    if(is_key_pressed(LEFT_ALT))	keyports[0]|=0x10;      /* alpha */
-    if(is_key_pressed(TAB_KEY))         keyports[0]|=0x08;
-    
-#if 0
-
-    /* byte 0 */
-    if(is_key_pressed(scancode['\'']))	keyports[0]|=0x02;	/* colon */
-    if(is_key_pressed(scancode[';']))	keyports[0]|=0x04;
-    if(is_key_pressed(scancode['#']))	keyports[0]|=0x20;	/*arrow/pound*/
-    if(is_key_pressed(scancode[';']))	keyports[0]|=0x80; /* blank key nr CR = Oe */
-
-    /* byte 1 */
-    if(is_key_pressed(scancode[']']))	keyports[1]|=0x08;
-    if(is_key_pressed(scancode['[']))	keyports[1]|=0x10;
-
-    /* byte 2 */
-
-    /* byte 5 */
-
-    /* byte 6 */
-    if(is_key_pressed(scancode[' ']))	keyports[6]|=0x10;
-    if(is_key_pressed(scancode['`']) && !(keyports[8] & 1)) keyports[6]|=0x40; /* arrow/tilde */
-
-    /* byte 7 */
-    if(is_key_pressed(scancode['7']) && (keyports[8] & 1)) { /* / */
-      keyports[7]|=0x01;
-      keyports[8]|=1;
-    }
-
-#endif
-}
-#endif
+/* FIXME: In main.c, access our `states' array instead of calling is_key_pressed(). 
+   (The latter is meaningless as soon as we have installed our handler...) */
 
 static int ok = 0;
-static FILE *console;
-static int pending = EOF;
 
-void needconsole()
+#define CODERINGSIZE 16
+
+static int codering[CODERINGSIZE];
+static int front = 0, end = 0;
+
+static int capslock = 0, numlock = 0, scrolllock = 0;
+static int shift = 0, ctrl = 0, alt = 0, rightshift = 0;
+static unsigned char state[128];
+
+void handler(int scancode, int press)
+{
+  if ((end+1) % CODERINGSIZE != front) {
+    codering[end] = press ? scancode : (scancode|0x80);
+    end = (end+1) % CODERINGSIZE;
+  }
+  state[scancode&127] = press;
+}
+
+static void needconsole()
 {
   if (ok) return;
-  console = fopen("/dev/console", "r");
+  keyboard_seteventhandler(handler);
   ok = 1;
 }
 
+#define S(n, s) (ctrl ? 0 : (shift ? s : n))
+#define A(n, s, a) (ctrl ? 0 : (alt ? a : (shift ? s : n)))
+#define L(n, s) (ctrl ? 0 : (shift^scrolllock ? s : n))
+#define CL(n, s) (ctrl ? n - '@' : (shift^scrolllock ? s : n))
+
+/* Proper keyboard interface; German keyboard layout. */
 int getmzkey()
 {
   int c;
   
   needconsole();
 
-  if (pending!=EOF) {
-    c = pending;
-    pending = EOF;
-  }
-  else {
-    c = fgetc(console);
-  }
-    
-  if (c == EOF) return 0;
+  if (front == end) return 0;
+  
+  c = codering[front];
+  front = (front+1) % CODERINGSIZE;
 
-  /* FIXME: Conversion */
-  return c;
+  switch (c & 0x7f) {
+  case SCANCODE_RIGHTCONTROL:
+  case SCANCODE_LEFTCONTROL:	
+    ctrl = !(c&0x80); 
+    return 0;
+  case SCANCODE_LEFTSHIFT:	
+    shift = !(c&0x80); 
+    return 0;
+  case SCANCODE_RIGHTSHIFT:	
+    rightshift = shift = !(c&0x80); 
+    return 0;
+  case SCANCODE_RIGHTALT:
+  case SCANCODE_LEFTALT:	
+    alt = !(c&0x80); 
+    return 0;
+  }
+
+  if (c&0x80) return 0; /* key up */
+
+
+  if (numlock) {
+    switch (c) {
+    case SCANCODE_KEYPAD7: return '7';
+    case SCANCODE_KEYPAD8: return '8';
+    case SCANCODE_KEYPAD9: return '9';
+    case SCANCODE_KEYPAD4: return '4';
+    case SCANCODE_KEYPAD5: return '5';
+    case SCANCODE_KEYPAD6: return '6';
+    case SCANCODE_KEYPAD1: return '1';
+    case SCANCODE_KEYPAD2: return '2';
+    case SCANCODE_KEYPAD3: return '3';
+    case SCANCODE_KEYPAD0: return '0';
+    case SCANCODE_KEYPADPERIOD: return '.';
+    }
+  }
+
+   
+  switch (c) {
+  case SCANCODE_ESCAPE:	return 0x1b;
+  case SCANCODE_1: 	return S('1', '!');
+  case SCANCODE_2:	return S('2', '"');
+  case SCANCODE_3:	return A('3', 0xc6, 0xfc);
+  case SCANCODE_4:	return S('4', '$');
+  case SCANCODE_5:	return S('5', '%');
+  case SCANCODE_6:	return S('6', '&');
+  case SCANCODE_7:	return A('7', '/', 0xbe);
+  case SCANCODE_8:	return A('8', '(', '[');
+  case SCANCODE_9:	return A('9', ')', ']');
+  case SCANCODE_0:	return A('0', '=', 0x80);
+  case SCANCODE_MINUS:  return A(0xae, '?', '\\');
+  case SCANCODE_EQUAL:  return S('\'', 0x93);
+  case SCANCODE_BACKSPACE: return 0x10;
+  case SCANCODE_TAB:	return 0x09;
+  case SCANCODE_Q:	return alt ? '@' : CL('Q', 0xa0);
+  case SCANCODE_W:	return CL('W', 0xa3);	
+  case SCANCODE_E:	return CL('E', 0x92);
+  case SCANCODE_R:	return CL('R', 0x9d);
+  case SCANCODE_T:	return CL('T', 0x96);
+  case SCANCODE_Y:	return CL('Z', 0xa2);
+  case SCANCODE_U:	return CL('U', 0xa5);
+  case SCANCODE_I:	return CL('I', 0xa6);
+  case SCANCODE_O:	return CL('O', 0xb7);
+  case SCANCODE_P:	return alt ? 0xff : CL('P', 0x9e);
+  case SCANCODE_BRACKET_LEFT: return L(0xb2, 0xad);
+  case SCANCODE_BRACKET_RIGHT: return A('+', '*', 0x94);
+
+  case SCANCODE_KEYPADENTER:
+  case SCANCODE_ENTER:	
+    return 0x0d;
+
+  case SCANCODE_LEFTCONTROL: return 0;
+  case SCANCODE_A:	return CL('A', 0xa1);
+  case SCANCODE_S:	return CL('S', 0xa4);
+  case SCANCODE_D:	return CL('D', 0x9c);
+  case SCANCODE_F:	return CL('F', 0xaa);
+  case SCANCODE_G:	return CL('G', 0x97);
+  case SCANCODE_H:	return CL('H', 0x98);
+  case SCANCODE_J:	return CL('J', 0xaf);
+  case SCANCODE_K:	return CL('K', 0xa9);
+  case SCANCODE_L:	return CL('L', 0xb8);
+  case SCANCODE_SEMICOLON: return S(0xa8, 0xba);
+  case SCANCODE_APOSTROPHE: return S(0xb9, 0xbb);
+  case SCANCODE_GRAVE:	return S('^', 0x7b);
+  case SCANCODE_BACKSLASH: return S('#', '\'');
+  case SCANCODE_Z:	return CL('Y', 0xbd);
+  case SCANCODE_X:	return CL('X', 0x9b);
+  case SCANCODE_C:	return CL('C', 0x9f);
+  case SCANCODE_V:	return CL('V', 0xab);
+  case SCANCODE_B:	return CL('B', 0x9a);
+  case SCANCODE_N:	return CL('N', 0xb0);
+  case SCANCODE_M:	return CL('M', 0xb3);
+  case SCANCODE_COMMA:	return L(',', ';');
+  case SCANCODE_PERIOD: return L('.', ':');
+  case SCANCODE_SLASH:	return L('-', '_');
+  case SCANCODE_SPACE:	return ' ';
+  case SCANCODE_CAPSLOCK: 
+    capslock = !capslock;
+
+  case SCANCODE_F1:	
+  case SCANCODE_F2:
+  case SCANCODE_F3:
+  case SCANCODE_F4:
+  case SCANCODE_F5:
+    return (ctrl ? 0x6a : (shift ? 0x65 : 0x60))
+      + c - SCANCODE_F1;
+
+  case SCANCODE_F6: return 0;
+  case SCANCODE_F7: return 0;
+  case SCANCODE_F8: return 0;
+  case SCANCODE_F9: return 30 /* paper */;
+  case SCANCODE_F10: return 0;
+  case SCANCODE_F11: return 0;
+  case SCANCODE_F12: return 0;
+
+  case SCANCODE_NUMLOCK: 
+    numlock = !numlock;
+    return 0;
+  case SCANCODE_SCROLLLOCK:
+    scrolllock = !scrolllock;
+    return 0;
+
+  case SCANCODE_LESS: return A('<', '>', 0xfd);
+
+  case SCANCODE_KEYPAD0:	
+  case SCANCODE_INSERT: 
+    return 0x18;
+
+  case SCANCODE_KEYPADPERIOD:
+  case SCANCODE_REMOVE: 
+    if (ctrl) return 0x16;
+    front = (front - 1) % CODERINGSIZE;
+    codering[front] = SCANCODE_BACKSPACE;
+    return 0x13;
+    
+  case SCANCODE_CURSORUPLEFT:
+  case SCANCODE_HOME:	
+    return 0x15;
+  case SCANCODE_CURSORUP:
+  case SCANCODE_CURSORBLOCKUP: 
+    return rightshift ? 0xd1 : 0x12;
+  case SCANCODE_CURSORUPRIGHT:
+  case SCANCODE_PAGEUP: 
+    return 0;
+  case SCANCODE_CURSORLEFT:
+  case SCANCODE_CURSORBLOCKLEFT: 
+    return rightshift ? 0xd3 : 0x14;
+  case SCANCODE_CURSORRIGHT:
+  case SCANCODE_CURSORBLOCKRIGHT: 
+    return rightshift ? 0xd2 : 0x13;
+  case SCANCODE_CURSORDOWNLEFT:
+  case SCANCODE_END: 
+    return 0;
+  case SCANCODE_CURSORDOWN:
+  case SCANCODE_CURSORBLOCKDOWN: 
+    return rightshift ? 0xd0 : 0x11;
+  case SCANCODE_CURSORDOWNRIGHT:
+  case SCANCODE_PAGEDOWN: 
+    return 0;
+    
+  case SCANCODE_KEYPADMINUS:	return '-';
+  case SCANCODE_KEYPADPLUS:	return '+';
+  case SCANCODE_KEYPADMULTIPLY: return '*';
+  case SCANCODE_KEYPADDIVIDE:	return '/';
+  case SCANCODE_PRINTSCREEN:	return 0;
+  case SCANCODE_BREAK:
+  case SCANCODE_BREAK_ALTERNATIVE: return 0;
+
+  }
+  return 0;
 }
 
 int keypressed()
 {
-  int i;
-  int c;
   needconsole();
-  if (pending != EOF) return 1;
-  pending = fgetc(console);
-  return (pending != EOF);
+  return (front != end);
 }
 
 int mztermservice(int channel, int width)
