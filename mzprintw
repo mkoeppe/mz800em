@@ -1,0 +1,31 @@
+#! ./bin/sh
+# Print script for mz800em.
+# Copyright 1998,1999 Matthias K"oppe
+#
+# We are processing EPSON-style escape codes using `sed'.
+# We use BEL (\a) as enscript special escape.
+#
+
+#
+# You must have Ghostscript installed. 
+# Change the following path to point to the `gswin32c' executable,
+# if necessary.
+#
+GHOSTSCRIPT=/gstools/gs5.50/gswin32c
+
+#
+# No user serviceable parts beyond this point.
+#
+export ENSCRIPT_LIBRARY=./share/enscript
+export PATH=bin:.:$PATH
+xyzzy=$RANDOM
+while [ -f /tmp/t$xyzzy.esc ]; do
+	xyzzy=$RANDOM
+done
+echo mzprintw: Writing to /tmp/t$xyzzy...
+bin/tee /tmp/t$xyzzy.esc | bin/sed $'s/\e[0-2].//g;s/\e[-ltxmk].//g;s/\eS.2\eT/\375/g;s/\eS.\([3-9]\)\eT/^\\1/g;s/\eE/\afont{Courier-Bold@10}/g;s/\eF/\afont{Courier@10}/g;s/\eg/\afont{Courier@7}/g;s/\eh/\afont{Courier@10}/g;' | bin/enscript --no-header --escapes=7 --no-job-header  --encoding=ibmpc --non-printable-format=space --margins=72:72:72:72 --output=/tmp/t$xyzzy.ps || true
+$GHOSTSCRIPT -q -dNOPAUSE -sDEVICE=mswinpr2 -sOutputFile='\\spool\Standarddrucker' /tmp/t$xyzzy.ps || true
+#
+# mzprintw ends here
+#
+

@@ -1,0 +1,19 @@
+#! /bin/bash
+# Joins the MZ Files that make up the 16 parts of a 320KB disk
+# to create a single disk image 
+tail -c +133 $10.mzf > $1.image
+tail -c +133 $11.mzf >> $1.image
+tail -c +133 $12.mzf >> $1.image
+tail -c +133 $13.mzf >> $1.image
+tail -c +133 $14.mzf >> $1.image
+tail -c +133 $15.mzf >> $1.image
+tail -c +133 $16.mzf >> $1.image
+tail -c +133 $17.mzf >> $1.image
+tail -c +133 $18.mzf >> $1.image
+tail -c +133 $19.mzf >> $1.image
+tail -c +133 $1a.mzf >> $1.image
+tail -c +133 $1b.mzf >> $1.image
+tail -c +133 $1c.mzf >> $1.image
+tail -c +133 $1d.mzf >> $1.image
+tail -c +133 $1e.mzf >> $1.image
+tail -c +133 $1f.mzf >> $1.image

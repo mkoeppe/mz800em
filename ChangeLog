@@ -1,0 +1,330 @@
+1999-04-07  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	Version 0.7.2
+
+1999-04-06  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* z80.h, z80.c, mzterm.c, main.c, graphics.h, graphics.c, disk.c:
+	  Fixed compiler warnings; removed ^M from the sources.
+
+1999-03-21  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* Version 0.7.1
+
+1999-03-14  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mz80/makez80.c: Fixed special-memory read bug.
+	
+	* mzterm.c: Fixed DEL bug.
+
+1999-03-02  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mz80/...: Clean-up.  New `makez80' with option `-dm' creates the
+	code that `makez80f' used to create. 
+	
+	* mz80supp.c, main.c: Using mz80f?ReleaseTimeslice() instead of
+	cycles-remaining hack.
+
+1999-02-24  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Version 0.7
+	
+	* README: Documentation fixes.
+
+	* mzterm.c, main.c [Windows-32]: Reads keyboard only if active.
+
+1999-01-30  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mz80supp.c, main.c: We can now have USE_MZ80 with
+	TWO_Z80_COPIES. On my 486-25, the emulator then runs at 4.5
+	Bogo-MHz.
+
+	* Makefile, mz80supp.c: MZ80 support now for MZ80 version 2.6. The
+	hacked-in makez80 -lw option has been replaced by the official -nt
+	option.
+
+	* z80.h, z80.c, mz700em.h, main.c: TWO_Z80_COPIES support. We
+	include two copies of our Z80 core into the code; one that is like
+	the traditional one, and one that has all memory mapping disabled
+	(using direct memory access). The latter one is active when the
+	machine is in 64KB RAM mode. 
+	
+1999-01-29  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* main.c: Removed all `FUNNY_LPT_LOOPBACK' code.
+
+1999-01-24  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mz80/makez80.c, mz80/Makefile: The MZ80 code generator now
+	supports the -lw (`light-weight cycle-counting') option. This will
+	produce code with much less of cycle-counting, making everything
+	much faster. On my 486-25, the MZ80 version now runs at 4.1
+	Bogo-MHz (3.3 Bogo-Mhz before; old emulator 2.5 Bogo-MHz). 
+
+	* mz700em.h, main.c, graphics.c: Moved update_screen() from main.c
+	to graphics.c.
+
+1999-01-16  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Version 0.6.3
+
+	* main.c, disk.c: Fixed problem with non-existing directories.
+
+1999-01-15  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mz80supp.c, main.c: MZ80 now works very well, both at
+	emulated-speed and infinite-speed. [Just the game that needed the
+	pending_interrupts_hack() doesn't work for obvious reasons... But
+	there is a better way than plugging this hack into MZ80: Scale
+	down the number of cycles executed properly.] On my 486-25, MZ80
+	runs 30% faster than the traditional emulator; but on my
+	Pentium-120, both run at roughly the same speed.
+
+	* z80.c, mz80supp.c, main.c: Changed reset() logic; works better
+	with MZ80 this way. 
+
+	* mzterm.c: Update column counter when printing
+	characters. PRINT/P TAB() should work now.
+
+	* mz80/makez80.c: Changed the OTDR thingy (also sent a patch to
+	Neil Bradley).
+
+1999-01-14  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mz80/Makefile, mz80supp.c: New module, interfacing to the MZ80
+	(`multi Z80 emulator') by Neil Bradley. The MZ80 kernel is meant
+	to optionally replace the current kernel (z80.c, z80ops.c,
+	cbops.c, edops.c).
+
+	* main.c [Linux]: Changed signal code; now works with glibc. Fixed
+	minor bug in dontpanic().
+	
+1999-01-13  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Version 0.6.2
+
+	* mzterm.c [Windows-32]: New compiler option MZISHPRINTER omits
+	CR->CRLF conversion if set. This allows EPSON printers configured
+	for connection with an MZ be used with the emulator.
+
+1999-01-12  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Version 0.6.1
+
+	* mzterm.c [Windows-32]: Fixed Num-lock handling. Printer now opened 
+	  as a binary file. 
+
+1999-01-10  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+        * Version 0.6
+	
+	* Windows-32: The system now works smoothly even with Windows95.
+	  Palette functions disabled since not working this way in
+	  Windows95.  Timing not yet ready for games.
+	  
+	* Linux: Printing support via GNU enscript; providing
+	  emulator-side HCOPY command, using pnm2ps.
+
+1998-11-28  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* main.c, disk.c, graphics.c, graphics.h, Makefile, mzterm.c:
+	Added support for the Cygwin version. This is still a quick hack,
+	but runs quite well (using Cygwin Beta 20).
+
+	* mz800win.h, mz800win.c, scancode.h: New files for the Cygwin
+	(Windows-32) version.
+
+1998-11-14  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* main.c: The `real timer' support (`-r' option) is no longer
+ 	available by default (it was alpha anyway); you must compile with
+ 	REAL_TIMER defined to get it back.
+
+1998-11-08  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Started hacking at the Windows-32 version (using Cygwin).
+
+1998-11-05  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* Version 0.5
+
+	* main.c: Fixed/unified color handling in MZ700/MZ800 mode.
+
+1998-11-03  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* z80.c: New RISKY_REGS define.
+
+	* mzterm.c: Fixed the DEL key.
+
+	* README: Documentation fixes.
+
+1998-11-01  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mzterm.c, mz700em.h: Unified break handling.
+
+	* graphics.c: Removed the graphic artefacts that occured when
+	switching from MZ700-mode to MZ800-mode (introduced
+	`resetcolorplanes').
+
+	* main.c: If invoked with the new option `-7', the emulator starts
+	as if it were an MZ-700 (the MZ-1Z013A/B monitor is
+	entered). Otherwise, the MZ-800 IPL is entered; you have to type
+	`M' to get to the MZ-9Z504M monitor.
+
+	* main.c: Made printer port access conditional (define
+	ALLOW_LPT_ACCESS); no longer enabled by default.
+
+1998-10-31  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mzterm.c, mz700em.h, main.c: Added auto-repeat mollifier for
+	mzterm-ish keyboard input. (MZ BASIC programs typically expect
+	unbuffered input, which is simulated better this way.)
+	
+1998-10-25  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+	* mzterm.c: Added mzterm-ish printer and date support. Some fixes
+	with mzterm-ish keyboard.
+
+	* z80.h, edops.c: mztermservice now has an additional parameter,
+	in which the A register is passed.
+	
+1998-10-24  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* edops.c, z80.h, main.c, z80.c: The MZ800 monitor MZ-9Z504M
+	(which is invoked by typing JE800 at run-time or defining MZ800IPL
+	at compile-time) now also has a patched L command.
+
+	* main.c: Checking for PCG RAM changes in update_scrn(); updating
+	characters with changed appearance.
+
+	* main.c: Fixed block cursor keys.
+
+	* z80.c, cbops.c, edops.c, z80ops.c: More regular register
+	structure (define USE_REGS) and use of a x86 register for pc make
+	the emulator faster.
+	
+	* z80.c, z80.h, cbops.c, edops.c, z80ops.c, Makefile, disk.c,
+	mzterm.c: New options COPY_BANKSWITCH, SLOPPY_2, HEAVY_LOAD,
+	USE_REGS, NO_COUNT_TSTATES make the Z80 kernel much faster. In
+	COPY_BANKSWITCH mode, bankswitching is performed by copying
+	memory; operation fetch and data load are distinguished: fetch
+	never does mmio, is therefore much faster. In SLOPPY_2 mode,
+	2-byte memory operations at the edge of different memory types
+	will be wrong; but all operations will be somewhat faster.
+
+Fri Oct 16 00:00:28 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* edops.c, z80.h: New pseudo instruction `ed fa' for mzterm.
+
+	* main.c, mz700em.h, Makefile: Added mzterm support. 
+
+	* mzterm.c: New module, supporting a subset of mzterm's services
+ 	(these are only accessible from a special patched BASIC
+ 	version). This includes the new keyboard access, implementing a
+ 	German layout.
+	
+Thu Oct 15 17:17:10 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* main.c, Makefile: Keyboard handling now uses libvga instead of
+	 librawkey. 
+
+Mon Oct  5 22:48:14 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Version 0.4
+
+	* main.c, graphics.c: Moved all MZ800 graphics code from main.c to
+ 	the new graphics.c module. Final fixes with PLANE A/B support.
+
+Sun Oct  4 17:47:41 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* main.c: Added support for virtual BASIC floppy disks (disk.c
+ 	module).
+
+	* README: Documented BASIC floppy hacks.
+
+	* edops.c, z80.h: New pseudo instructions `ed fc', `ed ff',
+ 	supporting BASIC floppy access.
+
+	* disk.c: New module, providing virtual floppy disk
+ 	support. Either takes MZ disk images, or maps Unix directories
+ 	containing `*.btx' files to a MZ directory.
+
+	* cbops.c: Fixed BIT n,(HL) instruction -- don't store value back
+ 	(caused problems with memory-mapped I/O).
+
+Sat Oct  3 21:52:03 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Added support for 640x200 mode and PLANE A/B.
+
+Fri May  1 00:12:09 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Fixed Makefile; no longer tries to strip the `mzjoinimage' shell
+	  script.
+
+Tue Apr 21 22:46:02 1998  Matthias Koeppe  <mkoeppe@moose.boerde.de>
+
+	* Version 0.3
+
+Mon Apr 13 19:39:15 1998  Matthias Koeppe  <mkoeppe@cs.uni-magdeburg.de>
+
+        * Moved mz700em's `README' to `README-700' and wrote a README
+	  (borrowing from `README-700') that talks about mz800em.
+	
+	* New `mzextract' program can handle MZ800 320KB disk images: View
+	  directory, or extract the contained files as single Linux files.
+	
+	* Added a `snap loader', allowing:
+	  - loading an MZF file specified at the command line
+	  - specifying a 320KB disk image, which can be booted using the
+	    (slightly patched) Initial Program Loader (IPL) 
+	  - loading BASIC (or other) programs `from cassette' (you need a
+	    slightly patched BASIC interpreter to use this feature, see
+	    `README') 
+
+	* Changed a few things in the Z80 emulator:
+	  - Use correct high port address in OTD[R], IND[R], OTI[R], INI[R]
+	    instructions (`edops.c')
+	  - Added two more fake instructions, for disk/CMT support, in
+	    `edops.c'
+	  - Inserted `pending_interrupts_hack()' in the RETI instruction;
+	    this is for throwing sequence of interrupts at a time
+	  - Added interrupt support.
+	
+	* Added support for MZ800 and additional hardware, including:
+	  - PCG (Programmable Character Generator) and 2nd charset support
+	  - more mode-specific bank switching
+	  - MZ800 IPL ROM (at 0xE010--0xFFFF)
+	  - MZ800 64K RAM Disk (at ports 0xEA, 0xEB)
+	  - experimental printer support 
+	  - MZ800 pixel graphics (320x200 mode only)
+	  - MZ800 pallet/scroll
+	  - PIO, 8255, and 8253 control, providing several interrupt
+	    sources (vertical blanking, CONT2 timer, CONT0 timer)
+
+	* Added RESET key -- F11
+	
+	* Changed font-data bit order (in `main.c' and `unpix.c') to make the
+	  font data compatible with the MZ800 PCG ROM format.
+
+Wed Dec  4 15:18:06 1996  Russell Marks  <rus@lifeson>
+
+	* Version 0.2.
+
+	* README: stuff about transferring ROM.
+
+Mon Nov 11 23:18:51 1996  Russell Marks  <rus@lifeson>
+
+	* README: documented that sound support sucks rocks even more
+	under 2.0.x, due to (seemingly) non-zeroed DMA buffers.
+
+Sat Nov  2 19:01:43 1996  Russell Marks  <rus@lifeson>
+
+	* main.c: Added sound support.
+
+Sat Nov  2 03:31:40 1996  Russell Marks  <rus@lifeson>
+
+	* Version 0.1.
+
+Fri Nov  1 02:41:06 1996  Russell Marks  <rus@lifeson>
+
+	* Started hacking.

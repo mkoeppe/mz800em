@@ -1,0 +1,6 @@
+#! /bin/sh
+## Cat the ASCII representation of an MZ-800 BTX file to stdout by using the 
+## batch mode of mz800em.
+cp $1 /tmp/_x.btx
+/usr/local/bin/mz800em -b 'LO."X":LI./P:BOOT' /usr/local/lib/basick.mzf /tmp /tmp /tmp /tmp
+rm /tmp/_x.btx

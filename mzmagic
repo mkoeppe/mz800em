@@ -1,0 +1,10 @@
+# mz:  file(1) magic for SHARP MZ-80[ABK]/700/800 files, introduced by
+# mz700em and mz800em
+#
+## MZF1 (SHARP MZ-700/800 files; this format used by mz700em and mz800em)
+0	string	MZF1		SHARP MZ-700/800 file data (MZF1)
+>4	byte	0x01		\b, OBJ type
+>4	byte	0x02		\b, BTX(2) type
+>4	byte	0x05		\b, BTX(5) type
+## SHARP MZ800 boot images
+1	string  IPLPRO		SHARP MZ-800 bootable disk image data

@@ -1,0 +1,253 @@
+mz700em - an MZ700 emulator for VGA PCs running Linux
+
+Z80 emulation from `xz80', copyright (C) 1994 Ian Collier.
+MZ700 support and VGA front-end (C) 1996 Russell Marks.
+
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+
+`mz700fon.dat' is the character font data; this is not from the MZ700,
+but put together by hand (by me) - it's public domain. It was
+generated from `font.txt' using `unpix'.
+
+
+Roadmap
+-------
+
+The COPYING file contains a copy of the GPL described above.
+
+ChangeLog describes differences between all versions.
+
+
+Description
+-----------
+
+`mz700em' is a Sharp MZ700 emulator. It uses svgalib. It supports most
+m/c programs and games, including (say) Snake & Snake and S1-BASIC,
+but can currently only load m/c files from the ROM monitor. No other
+form of loading is possible, and saving is not possible. Among other
+things, this means that while you *can* load Basic, you *can't* load
+Basic programs.
+
+Note that I wrote mz700em solely to be able to play a few old MZ700
+games (esp. Snake & Snake) - and you should bear this in mind before
+flaming me for its many omissions... :-)
+
+
+Installation
+------------
+
+First, get a copy of the ROM from an MZ700 (see below).
+
+You'll also need my rawkey library - a precompiled ELF copy is
+included here.
+
+After sorting the ROM out etc., do `make' and `make install'.
+
+Be sure to read all of this README. mz700em is a quick hack, so you'd
+better know all about the gotchas before running it. :-)
+
+
+Getting a copy of the ROM
+-------------------------
+
+Since the ROM is still copyright Sharp and they don't (AFAIK) allow
+free use in emulators, I'm not allowed to include a copy here. So, you
+need to transfer it from a real MZ700 yourself. This shouldn't be too
+hard, as the `mzget' program included here can load programs etc. from
+tape if you have a soundcard on /dev/dsp capable of 44.1kHz recording.
+Do `make mzget' to compile it.
+
+To transfer the ROM then, you need to do this on an MZ700 from the ROM
+monitor:
+
+	S00000FFF0000
+
+Yes, no spaces! This saves 0000h-0FFFh, the 4k ROM. (The last 0000h is
+an execution address, which doesn't matter, but *is* required for the
+command to work.) Record this to tape as you normally would. Then, run
+mzget and play that tape into the soundcard's mic socket or whatever.
+This should probably work first time - if it doesn't, try changing the
+volume levels or, as a last resort, modify line 231 of mzget.c and
+recompile. But if it does work, you'll end up with `header.dat', which
+you don't need in this case, and `out.dat' which will contain the ROM.
+Do `mv out.dat mz700.rom', then do `md5sum mz700.rom'. You should get:
+
+	27990ced7cb97dd80356f517aa705010  mz700.rom
+
+...as that's what my copy gives. If you do get this, then your ROM is
+definitely ok, and the emulator should then work. Even if you don't
+get this result, it's possible you may simply have a different ROM
+version, so you should try it and see if it works anyway.
+
+BTW, don't worry if `mzget' seems to stop in the middle of the tape
+data, i.e. if it claims to have loaded ok before the noise has
+stopped. The MZ700 perversely saves tape data *twice* - that's right,
+two copies. The ROM tape load routine tries loading the second copy if
+the first copy didn't work, and only gives an error if neither copy
+worked. `mzget' only ever bothers with the first copy.
+
+I know requiring you to transfer the ROM yourself is a bit of a pain,
+but I don't really have a choice. Sorry. Still, if you've tried this
+and failed, or don't have a good enough soundcard, send me a dos
+format 1.4Mb floppy *WITH RETURN POSTAGE!* and either:
+
+- a photocopy of the first page of the ROM disassembly in the manual
+(p165 in my copy); or
+
+- a copy of the first 128 bytes of the ROM (which you'll have to
+transcribe). You can get an MZ700 to display these with `D0000' from
+the ROM monitor - copy down the first 16 lines of hex.
+
+...and I'll send you a copy of the ROM. (The idea of your sending one
+of the above is to demonstrate that you have an MZ700 and thus a legal
+copy of the ROM, of course.)
+
+Please please make sure to send self-addressed return postage, and
+make sure it's suitable for *me* to send. Something with (say) US
+stamps on won't impress the UK post office. :-)
+
+
+History etc.
+------------
+
+Mz700em is based on Ian Collier's xz80, via Z81 and nc100em.
+
+I give Ian the main author credit for it, as the Z80 emulation is much
+harder to do than emulating the MZ700's hardware etc. However, any
+correspondence regarding mz700em should be to me, as Ian hasn't had
+anything else to do with it and probably hasn't even heard of the
+MZ700.
+
+
+Using mz700em
+-------------
+
+There's no man page due to this being a really quick hack, so this'll
+have to do. Sorry. :-)
+
+You can quit with F10. Virtual console switching works as usual with
+Alt-Fn. The emulated MZ700 attempts to run at 3.5MHz, so if xz80 runs
+at a reasonable speed on your machine, this should too.
+
+The keyboard assumes a UK layout, I'm afraid, and some keys may be
+inaccessible on some other layouts. Most keys are mapped in the
+obvious way, but there are some exceptions:
+
+Keyboard		Emulated as
+
+'			:
+#			down-arrow/pound sign
+`			graph
+page up			graph (as well - take your pick)
+tab			alpha
+page down		_ (key above CR on the MZ)
+<--			break
+F7			@
+F8			?
+
+Some of these mappings suck pretty hard, but there's not much I can do
+about that, the MZ700 keyboard is *weird*.
+
+Running it with "mz700em -s" enables sound. This is very experimental,
+and quite frankly, not very good. See below for problems with it.
+
+
+There are the following bugs/restrictions/etc. in mz700em:
+
+Files to be loaded must be in "MZF" format. This was artificially
+kludged up in the same way as I did with the xzx savefile format - a
+magic number followed by the tape file's header and data. You can use
+the `mzget' program described earlier to load from tape if you have a
+soundcard on /dev/dsp capable of 44.1kHz recording. (Mzget outputs
+header.dat and out.dat. To make a mzf file from these do:
+
+	(echo -n 'MZF1';cat header.dat out.dat) >foo.mzf
+
+...then to load this in mz700em type "LFOO" (or "L FOO") in the ROM
+monitor.)
+
+Any mzf files to be loaded as described above must be in the current
+directory.
+
+There's no support for printer, disk, or even tape (apart from the
+modified monitor command mentioned above).
+
+The sound support isn't very good - music will play infinitely fast,
+and sound effects may sound odd. It also seems to lock up at times
+(the latter problem may be fixed now, I'm not sure), and at other
+times it breaks up. And it sounds really, *really* bad on kernel
+v2.0.x. I don't think the DMA buffer is being zeroed between transfers
+any more, so if/when it breaks up (as it seems to, in mz700em) it
+sounds disgustingly bad.
+
+Only the first 2k of the character font data is `implemented'. (Some
+(later?) machines had another 2k's worth with space invader and pacman
+graphics, etc.) So some non-sharp games may look odd. I know kuma's
+"beginner's chess" would, for example.
+
+The 12-hourly interrupt is not emulated. As a result, times will not
+switch from am -> pm or vice versa - so in Basic, a TI$ of "115959"
+will incr to "000000", and "235959" will incr to "120000".
+
+The colours are a bit funny. They're too bright, but darker colours
+don't seem to really look right either. (sigh)
+
+
+Games I can send copies of
+--------------------------
+
+If you have trouble transferring games from tape, there are several
+games I've transferred which I could send. I'll need proof that you've
+got the game - a photocopy of the inlay (or even the tape itself) is
+sufficient. (As I said above, please include a dos format disk and
+suitable return postage.)
+
+Anyway, the games I've got are:
+
+- all the ones from sharp's game tapes 1&2 - snake & snake, circus
+star, super puckman, round shoot, manhunt, land escape, painful man,
+send-1, battle game, and moving searcher.
+
+- kuma's "star avenger" and "void".
+
+
+(Lack of) Future developments
+-----------------------------
+
+While I'm very unlikely to do further hacking on mz700em in future,
+feel free to try and prod me into making it better, if you want. :-)
+
+
+Contacting me
+-------------
+
+No email address at the moment I'm afraid. :-(
+
+Postal address:
+		Russell Marks,
+		3 Rapley Close,
+		Camberley,
+		Surrey,
+		GU15 4ER,
+		United Kingdom.
+
+If you insist on abbreviating my name, please use "R. J. Marks".
+
+
+Share and enjoy! 
+
+-Rus.

@@ -1,0 +1,50 @@
+Write a man page.
+
+Find a way to directly read in MZ800 disks into the PC.
+
+Timing of interrupts is still not perfect, see FIXME's in the source.
+
+MZ700-ish sound support: I (mkoeppe) did not try the sound at all, so
+maybe -- after adding my MZ800 support -- the existing MZ700 sound
+code is broken.
+
+MZ800-ish sound support: Use EMULib by Marat Fayzullin to support the
+SN76489 programmable sound generator. Hm... I have never done any
+sound programming, so probably someone else should do this part.
+
+The `ixoriy', `new_ixoriy', `intsample' stuff in `z80.c' might be
+removed conditionally if we decide to include "z80ops.c" two (or
+three) times; one copy with ixoriy #define'd 0, and one copy which
+becomes active when an dd/fd prefix occurs.
+
+Support the X Window system, maybe using some code from Russell Marks'
+Z81 (metalab.unc.edu/pub/Linux/system/emulators/zx/z81-1.2.tar.gz) or
+nc100em. 
+
+Make a version running in DOS (using DJGPP and the svgalib port to
+DJGPP). 
+
+Cygwin: Add proper timing. Fix palette problem. Let the process pause
+if window is not active, or if it is waiting for mzterm-ish keyboard
+input. 
+
+GNU/Linux: Finish the `VGA16' mode of doing graphics; this should
+improve speed on my slow VGA computer, especially in 640x200 mode.
+
+Add support for the SHARP MZ-900 series, a Z80 machine running at
+12MHz, compatible with the MZ-800 series, but featuring 2 pages of
+640x200 graphics at 16 colors (4 planes), mapped at addresses
+0x8000--0xBFFF (INIT"CRT:M6"). With the video-RAM extension MZ-1R26,
+the MZ-900 even provides 2 pages of 640x400 graphics at 16 colors,
+mapped at addresses 0x8000--0xFFFF (INIT"CRT:M8"). Both modes behave
+much like the "M4" mode. Modes "M5" and "M7" cannot be used, however;
+the corresponding values of the DMD register are marked as
+`prohibited' in the service manual. -- Unfortunately, I don't have the
+native BASIC interpreter of this machine, so I have to change the
+MZ-800 DBASIC interpreter to support the new features.
+
+Support multi-file cassette programs.  Put several headers/data blocks
+into one `mzf' file.
+
+Support file formats of other mz700 emulators.  Or write a script for
+converting these file formats.

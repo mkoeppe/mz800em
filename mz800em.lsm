@@ -1,0 +1,36 @@
+Begin3
+Title:          mz800em
+Version:        0.7.2
+Entered-date:   11APR99
+Description:	Mz800em is a SHARP MZ-800 emulator for the Linux console
+		(svgalib).  It can run most MZ-80K, MZ-700 and MZ-800
+		programs; hi-res graphics is supported.  MZ firmware
+		and software are not included; you must transfer them
+		from a real SHARP MZ to get started.
+
+		Mz800em is based on mz700em-0.2 by Russell Marks,
+		which in turn is based on Ian Collier's xz80.  Some of
+		the changes at the Z80 kernel for version 0.5, which
+		led to a somewhat faster kernel, were inspired by a
+		deep view into an MZ-800 emulator for DOS by Jaroslav
+		Kysela <kysela@virgo.jcu.cz>.  
+
+		Mz800em can optionally use the (non-GPL) Multi-Z80
+		emulator by Neil Bradley <neil@synthcom.com> instead
+		of the traditional Z80 emulator; it is included in the
+		distribution.
+
+Keywords:       SHARP MZ800 MZ700 MZ80K emulator
+Author:         imc@comlab.ox.ac.uk (Ian Collier)
+		rus@forfree.at (Russell Marks)
+		neil@synthcom.com (Neil Bradley)
+		mkoeppe@mail.math.uni-magdeburg.de (Matthias Koeppe)
+Maintained-by:  mkoeppe@mail.math.uni-magdeburg.de (Matthias Koeppe)
+Primary-site:   metalab.unc.edu /pub/Linux/system/emulators
+		mz800em-0.7.2.tar.gz
+Alternate-site: http://www.cs.uni-magdeburg.de/~mkoeppe/mz800/mz800.html
+Platforms:      Linux with svgalib, Windows-32 with cygwin
+Copying-policy: GPL.  Includes MZ80 by Neil Bradley, which is non-GPL,
+		restricted to non-commercial use and requires unmodified
+		distribution.
+End
