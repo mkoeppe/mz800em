@@ -176,7 +176,7 @@ void update_palette()
   refresh_screen = 1;
 }
 
-void do_border()
+void do_border(int do_color)
 {
 }
 
@@ -282,7 +282,7 @@ int is_key_pressed(int k)
 void scan_keyboard()
 {}
 
-void keyboard_update()
+int keyboard_update()
 {}
 
 void screen_init()
