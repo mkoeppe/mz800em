@@ -19,7 +19,10 @@
  */
 
 #include <vgakeyboard.h>
+#include <time.h>
+#include <stdio.h>
 #include "mz700em.h"
+#include "z80.h"
 
 #ifdef linux
 #else
@@ -34,9 +37,9 @@
    the services provided in this file. */
 
 static int ok = 0;
-
 static int capslock = 0, numlock = 0, scrolllock = 0;
 static int shift = 0, ctrl = 0, alt = 0, rightshift = 0;
+static int printer_status = 4;
 
 static void needconsole()
 {
@@ -152,13 +155,13 @@ int getmzkey()
   case SCANCODE_B:	return CL('B', 0x9a);
   case SCANCODE_N:	return CL('N', 0xb0);
   case SCANCODE_M:	return CL('M', 0xb3);
-  case SCANCODE_COMMA:	return L(',', ';');
-  case SCANCODE_PERIOD: return L('.', ':');
-  case SCANCODE_SLASH:	return L('-', '_');
+  case SCANCODE_COMMA:	return S(',', ';');
+  case SCANCODE_PERIOD: return S('.', ':');
+  case SCANCODE_SLASH:	return S('-', '_');
   case SCANCODE_SPACE:	return ' ';
   case SCANCODE_CAPSLOCK: 
     capslock = !capslock;
-
+    return 0;
   case SCANCODE_F1:	
   case SCANCODE_F2:
   case SCANCODE_F3:
@@ -238,13 +241,58 @@ int keypressed()
   return (front != end);
 }
 
-int mztermservice(int channel, int width)
+void pr(unsigned char c)
+{
+  /* FIXME */
+  FILE *p = fopen("~printer~", "a");
+  fprintf(p, "%c", c);
+  fclose(p);
+}
+
+int print(unsigned char c)
+{
+  if (printer_status & 4) {
+    switch(c) {
+    case 0x0D: pr(0x0D); pr(0x0A); return;
+    case 0xa1: c='a'; break;  case 0x9a: c='b'; break;  case 0x9f: c='c'; break;
+    case 0x9c: c='d'; break;  case 0x92: c='e'; break;  case 0xaa: c='f'; break;
+    case 0x97: c='g'; break;  case 0x98: c='h'; break;  case 0xa6: c='i'; break;
+    case 0xaf: c='j'; break;  case 0xa9: c='k'; break;  case 0xb8: c='l'; break;
+    case 0xb3: c='m'; break;  case 0xb0: c='n'; break;  case 0xb7: c='o'; break;
+    case 0x9e: c='p'; break;  case 0xa0: c='q'; break;  case 0x9d: c='r'; break;
+    case 0xa4: c='s'; break;  case 0x96: c='t'; break;  case 0xa5: c='u'; break;
+    case 0xab: c='v'; break;  case 0xa3: c='w'; break;  case 0x9b: c='x'; break;
+    case 0xbd: c='y'; break;  case 0xa2: c='z'; break;  case 0xb9: c=0216; break;
+    case 0xa8: c=0231; break;  case 0xb2: c=0232; break;  case 0xbb: c=0204; break;
+    case 0xba: c=0224; break;  case 0xad: c=0201; break;  case 0xae: c=0xe1; break;
+    case 0xff: c=0xe3; break;
+    }
+  }
+  pr(c);
+}
+
+void send_datetime()
+{
+  struct tm *t;
+  time_t tt;
+  time(&tt);
+  t = localtime(&tt);
+
+  /* put current date at 0x10F1 */
+  sprintf((char *) mempointer(0x10F1), "%02d.%02d.%4d", t->tm_mday, t->tm_mon+1, 
+	  t->tm_year<1900 ? t->tm_year+1900 : t->tm_year);
+}
+
+int mztermservice(int channel, int width, int a)
 {
   switch (channel) {
   case 0 /* read key */: return getmzkey();
   case 1 /* query keyboard status change */: return keypressed() ? 0 : 0xff;
-
+  case 2 /* print character */: print(a); return 0;
+  case 12 /* set printer status */: printer_status = a; return 0;
+  case 14 /* set date */: send_datetime(); return 0;
     /* more services see mz.pas */
   }
+  return 0;
 }
 
