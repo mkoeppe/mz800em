@@ -1,0 +1,344 @@
+mz800em - an MZ800 emulator for VGA PCs running a Linux-based GNU system
+
+Z80 emulation from `xz80', copyright (C) 1994 Ian Collier.
+MZ700 support and VGA front-end (C) 1996 Russell Marks.
+MZ800 support is copr. 1998 Matthias Koeppe <mkoeppe@cs.uni-magdeburg.de>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+
+Roadmap
+-------
+
+The COPYING file contains a copy of the GPL described above.
+
+ChangeLog describes differences between all versions.
+
+README-700 is the original read-me file of mz700em by Russell Marks.
+
+
+Description
+-----------
+
+`mz800em' is a Sharp MZ800 emulator. It uses svgalib. You can run
+MZ80K, MZ700 and MZ800 programs. It supports most m/c programs and
+games. There are also methods for loading BASIC programs into some
+BASIC interpreters. A patched version of D-BASIC has full-featured
+access to directories in the Unix file system.
+
+
+Getting mz800em
+---------------
+
+Visit the mz800em pages at
+
+	http://www.cs.uni-magdeburg.de/~mkoeppe/mz800/mz800.html
+
+You will find the most current version of `mz800em' there, but also
+some interesting MZ-related links.
+
+
+Installation
+------------
+
+First, get a copy of the ROM from an MZ800 (see below).
+
+You'll also need Russell's rawkey library - a precompiled ELF copy is
+included here.
+
+After sorting the ROM out etc., do `make' and `make install'.
+
+Be sure to read all of this README. 
+
+
+Getting a copy of the ROM
+-------------------------
+
+Since the ROM is still copyright Sharp and they don't (AFAIK) allow
+free use in emulators, I'm not allowed to include a copy here. 
+
+So, you need to transfer it from a real MZ700/MZ800 yourself. In the
+README-700 file, Russell tells you how to do it, using a good
+soundcard. I (mkoeppe) tried this just once, and it didn't work, but
+perhaps you are luckier.
+
+On an MZ800, there are three portions of ROM that must be transferred:
+
+ * The ROM inherited from the MZ700 at 0x0000--0x0FFF. This goes to
+   the file `mz700.rom'.
+
+ * The IPL ROM at 0xE000--0xFFFF. This goes to the file `mz800.rom'.
+
+ * The PCG (programmable character generator) ROM. This goes to the
+   file `mz700fon.dat'. The ROM is hidden at 0x1000--0x1FFF. Do the
+   following to make it visible at 0x2000--0x2FFF, from where you can
+   save it:
+
+	In the MZ800 ROM monitor, type `M3000<CR>', then 
+	`DB<CR> E0<CR> 11<CR> 00<CR> 20<CR> 21<CR> 00<CR> 10<CR> 
+	 01<CR> 00<CR> 10<CR> ED<CR> B0<CR> DB<CR> E1<CR> C9<CR>',
+	then press <SHIFT+BREAK>. Type `G3000<CR>'. 
+
+   (If this seems to be too complicated, there is an alternative:
+   Russell's public-domain MZ700-ish character font data. Use `unpix'
+   with `font.txt' to generate `mz700fon.dat'. This will create only
+   the first 2K of the font data, so the 2nd charset will be missing.)
+
+Getting all this code over to your PC is quite a lot of work. So, if
+you have good relations to SHARP Corp., try to convince them that they
+make their SHARP MZ-800 firmware/software free, so that we can include
+it to this emulator distribution.
+
+In the mean time, I can send you copies of the `mz700.rom',
+`mz800.rom', `mz700fon.dat' files via email, *if* you can somehow
+prove that you have an MZ800 and thus a legal copy of the ROM. Here
+are some ideas taken from README-700:
+
+ - a photocopy of the first page of the ROM disassembly in the manual,
+   or 
+
+ - a copy of the first 128 bytes of the ROM (which you'll have to
+   transcribe). You can get an MZ800 to display these with `D0000'
+   from the ROM monitor - copy down the first 16 lines of hex.
+
+
+History etc.
+------------
+
+Mz800em is based on Mz700em by Russell Marks. See ChangeLog for
+details. 
+
+Russell writes:
+
+  Mz700em is based on Ian Collier's xz80, via Z81 and nc100em.
+
+  I give Ian the main author credit for it, as the Z80 emulation is
+  much harder to do than emulating the MZ700's hardware etc. However,
+  any correspondence regarding mz700em should be to me, as Ian hasn't
+  had anything else to do with it and probably hasn't even heard of
+  the MZ700.
+
+
+Using mz800em
+-------------
+
+There's no man page due to this being a really quick hack, so this'll
+have to do. Sorry. :-)
+
+You can quit with F10. Virtual console switching works as usual with
+Alt-Fn. The emulated MZ800 attempts to run at 3.546MHz, so if xz80 runs
+at a reasonable speed on your machine, this should too.
+
+The F11 key performs a RESET on the emulated Z80.
+
+The F12 key will toggle between gray-scale and colour display.
+
+The keyboard assumes a UK layout, I'm afraid, and some keys may be
+inaccessible on some other layouts. Most keys are mapped in the
+obvious way, but there are some exceptions:
+
+Keyboard		Emulated as
+
+'			:
+#			down-arrow/pound sign
+`			graph
+page up			graph (as well - take your pick)
+tab			alpha
+page down		_ (key above CR on the MZ)
+<--			break
+F7			@
+F8			?
+
+Some of these mappings suck pretty hard, but there's not much I can do
+about that, the MZ800 keyboard is *weird*.
+
+Running it with "mz800em -s" enables 700-ish sound. This feature has
+been inherited from mz700em (cf. README-700 for details), and I didn't
+try it, so maybe it doesn't even work at all in this version. There is
+no support for 800-ish sound at all.
+
+There is some experimental support for printers. I didn't actually try
+to connect a printer, but a special printer-port based data transfer
+works the same way it does on a real MZ. The PC printer port is
+accessed directly, and the port address is hard-wired into the
+program.
+
+The 64KB RAM disk is supported.
+
+All hardware interrupt sources of the MZ800 are supported, but the
+interrupt timing is not perfect. A lot of interrupt-driven games work
+properly due to the available support. I actually know only one game
+that does not work.
+
+There is no support for cassette, quick-disk, floppy disk, the 32KB
+S-RAM card, or joysticks. But in some cases we can fake cassette/floppy
+operation: read the next section on how to load files.
+
+
+Loading files
+-------------
+
+* Loading m/c programs at the ROM monitor prompt
+
+  Files to be loaded must be in `MZF' format. This is an artificial
+  format - a magic number followed by the tape file's header and
+  data. Read the README-700 file and the `Transferring...' section
+  below on how to get your MZ files from tape or disk to `MZF' format.
+
+  At the ROM monitor prompt, to load `foo.mzf', type `L FOO'.
+
+* Loading m/c programs from the shell command line
+
+  To boot the MZ and load `foo.mzf', type `mz800em foo.mzf'.
+  This will fail to work with some programs, since some
+  initializations normally done by the ROM monitor are left out.
+
+  Some of the MZ700's original cassette games (e. g., `CIRCUS STAR')
+  only work properly if the ROM monitor is copied to RAM first (this
+  used to be done by a special loader program on tape). In these
+  cases, type `mz800em -c foo.mzf'.
+
+* Booting a disk image 
+
+  I know of one largish game, which comes on a disk, loads itself into
+  RAM using the IPL ROM disk routines, and stops using the disk at
+  all. In this case, if `foo.image' is an image of this disk, you can
+  boot with it by typing `mz800em foo.image'.
+
+  This only works since I have patched one IPL ROM routine
+  properly. The floppy controller is not actually emulated. This
+  implies that if the booted program uses its own floppy routines and
+  not the IPL ROM floppy routines, nothing will work.
+
+* Loading a CMT-based BASIC interpreter plus BASIC programs
+
+  You need a BASIC interpreter that supports cassettes. It must be
+  patched using the following instructions:
+
+  S-BASIC MZ-1Z013B:	POKE$A88,$ED,$FE,$D1,$C9
+  QD-BASIC MZ-5Z008:	POKE$3121,0,0,0:POKE$312C,$ED,$FE,$D1,$C9
+
+  I haven't figured out the places where to patch in other BASIC
+  versions yet.
+
+  BASIC programs don't need to be in `MZF' format; they may be raw
+  data.	I assume that your BASIC programs have a `.btx' extension. Now
+  type `mz800em s-basic.mzf foo.btx bar.btx baz.btx'. The MZ will
+  boot, and the S-BASIC will load. Apply the patch as shown above.
+
+  You can now think of the specified `.btx' files as being `on a
+  virtual tape'. Type `LOAD"X"'. You will see three `Found...'
+  messages, then `Break!'. This means, BASIC found the headers of
+  three files `FOO', `BAR', and `BAZ' on the tape, but none of them
+  matched `X', so they weren't loaded. 
+
+  So, if you type `LOAD"FOO"', the `foo.btx' file will be loaded. If
+  you type `LOAD', the first specified file will be loaded.
+
+  You might want to apply the BASIC patch to the `s-basic.mzf' file
+  instead of typing it in every time. Use your favourite editor to do
+  this (e. g., in `emacs', type `M-x hexl-find-file'). Note that there
+  is a header of 132 bytes in front of the actual code in an MZF file.
+
+* Loading an FD-based BASIC interpreter plus BASIC programs
+
+  Patch the BASIC using the following instructions:
+
+  D-BASIC MZ-2Z046:	POKE$393E,$ED,$FF,$C9 
+  for lower-level
+  support additionally:	POKE$3991,$21,$DF,$37,$ED,$FB,$C9
+
+  I haven't figured out how to patch other BASIC versions yet.
+
+  The floppy disk support comes in two flavours:
+  
+   - You can access a 320KB SHARP BASIC floppy disk image. All
+     operations are supported. 
+
+   - You can access a Unix directory containing *.btx files; the
+     emulator builds a MZ-ish directory of them. You can load, save,
+     rename, delete, lock, unlock BTX files; everything is mapped
+     automagically into operations in the Unix directory. But there is
+     no support for OBJ, BSD, or BRD files.
+
+  Let `scan.image' be a 320KB disk image, `d-basic.mzf' the D-BASIC
+  interpreter and `work' a Unix directory containing some *.btx
+  files. Typing `mz800em d-basic.mzf scan.image work' will make the
+  FD1 device access the image file and will make the FD2 device access
+  the Unix directory.
+
+  You might want to apply the BASIC patch to the `d-basic.mzf' file
+  instead of typing it in every time. Use your favourite editor to do
+  this (e. g., in `emacs', type `M-x hexl-find-file'). Note that there
+  is a header of 132 bytes in front of the actual code in an MZF file.
+
+
+Transferring data from the MZ to your PC
+----------------------------------------
+
+One method, using a tape recorder with your soundcard, is described by
+Russell in the README-700 file. I didn't try this method seriously.
+
+If you have an MZ800 with a floppy disk, you might want to read MZ800
+floppies into your PC. I suspect this might work using setfdprm(8),
+but I don't know what to do actually. Please tell me, if you know.
+
+If you have somehow copied an image of your MZ800 disk to the PC, you
+can use my `mzextract' utility. This understands the MZ800 disk file
+system; it can show the directory and extract files, storing single
+MZF files to the Linux file system.
+
+I prefer transferring MZ files using a parallel data cable (which you
+normally use to connect a notebook to a PC). This requires additional
+software both on the MZ and the DOS-based PC. A 320KB MZ disk is then
+copied to the PC, where it arrives as 16 files, each of 20 KB
+size. Using `mzjoinimage', these files are cat'ted together
+again. Then I apply my `mzextract' utility. 
+
+If you are interested in this solution, please contact me. You will
+have to prove that you have a legal copy of the Disk BASIC MZ-2Z046,
+since the solution uses a heavily patched MZ-2Z046 version on the MZ
+side of the connection.
+
+
+Projects for MZ700/MZ800 fans
+-----------------------------
+
+Collect MZ software which has been released to the public domain. Make
+a well sorted archive and a nice web-site.
+
+Convince authors/copyright holders of MZ software to make their
+software free.
+
+Find a way to directly read in MZ800 disks into the PC.
+
+Add MZ800-ish sound support.
+
+Write a man page.
+
+(See TODO file for more.)
+
+
+Contacting me
+-------------
+
+Email address: mkoeppe@cs.uni-magdeburg.de
+Web pages:     http://www.cs.uni-magdeburg.de/~mkoeppe
+
+No postal address for you at the moment I'm afraid. :-)
+
+Read the README-700 file on how to contact Russell Marks, the author
+of mz700em. 
+
