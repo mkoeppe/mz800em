@@ -64,6 +64,8 @@ int getmzkey()
   c = codering[front];
   front = (front+1) % CODERINGSIZE;
 
+  if (!(c&0x80)) coderingdowncount--;
+
   switch (c & 0x7f) {
   case SCANCODE_RIGHTCONTROL:
   case SCANCODE_LEFTCONTROL:	
@@ -83,6 +85,7 @@ int getmzkey()
 
   if (c&0x80) return 0; /* key up */
 
+  if (coderingdowncount) return 0;
 
   if (numlock) {
     switch (c) {

@@ -132,6 +132,7 @@ int scancode[128];
 unsigned char key_state[128];
 int codering[CODERINGSIZE];
 int front = 0, end = 0;
+int coderingdowncount = 0;
 void key_handler(int scancode, int press);
 #endif
 
@@ -1240,6 +1241,7 @@ void key_handler(int scancode, int press)
 {
   if ((end+1) % CODERINGSIZE != front) {
     codering[end] = press ? scancode : (scancode|0x80);
+    if (press) coderingdowncount++;
     end = (end+1) % CODERINGSIZE;
   }
   key_state[scancode&127] = press;

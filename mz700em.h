@@ -14,4 +14,4 @@
 #define CODERINGSIZE 16
 extern int codering[CODERINGSIZE];
 extern int front, end;
-
+extern int coderingdowncount;
