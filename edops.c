@@ -46,7 +46,7 @@
             f=(a&0xa8)|((!a)<<6)|(((a&15)>0)<<4)|((a==128)<<2)|2|(a>0))
 
 {
-   unsigned char op=fetch(pc);
+   unsigned char op=fetchpc;
    pc++;
 #ifndef NO_COUNT_TSTATES
    radjust++;
@@ -65,7 +65,7 @@ instr(0x42,11);
 endinstr;
 
 instr(0x43,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
     store2b(addr,b,c);
    }
@@ -101,10 +101,14 @@ instr(0x4a,11);
 endinstr;
 
 instr(0x4b,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
+#ifdef USE_REGS
+    bc=load2(addr);
+#else
     c=load(addr);
     b=load(addr+1);
+#endif
    }
 endinstr;
 
@@ -139,9 +143,13 @@ instr(0x52,11);
 endinstr;
 
 instr(0x53,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
+#ifdef USE_REGS
+    store2(addr, de);
+#else
     store2b(addr,d,e);
+#endif
    }
 endinstr;
 
@@ -175,10 +183,14 @@ instr(0x5a,11);
 endinstr;
 
 instr(0x5b,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
+#ifdef USE_REGS
+    de = load2(addr);
+#else
     e=load(addr);
     d=load(addr+1);
+#endif
    }
 endinstr;
 
@@ -213,9 +225,13 @@ instr(0x62,11);
 endinstr;
 
 instr(0x63,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
+#ifdef USE_REGS
+    store2(addr, hl);
+#else
     store2b(addr,h,l);
+#endif
    }
 endinstr;
 
@@ -253,10 +269,14 @@ instr(0x6a,11);
 endinstr;
 
 instr(0x6b,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
+#ifdef USE_REGS
+    hl = load2(addr);
+#else
     l=load(addr);
     h=load(addr+1);
+#endif
    }
 endinstr;
 
@@ -294,7 +314,7 @@ instr(0x72,11);
 endinstr;
 
 instr(0x73,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
     store2(addr,sp);
    }
@@ -325,7 +345,7 @@ instr(0x7a,11);
 endinstr;
 
 instr(0x7b,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
     sp=load2(addr);
    }
@@ -346,9 +366,13 @@ endinstr;
 instr(0xa0,12);
    {unsigned char x=load(hl);
     store(de,x);
+#ifdef USE_REGS
+    hl++, de++, bc--;
+#else
     if(!++l)h++;
     if(!++e)d++;
     if(!c--)b--;
+#endif
     f=(f&0xc1)|(x&0x28)|(((b|c)>0)<<2);
    }
 endinstr;
@@ -356,8 +380,12 @@ endinstr;
 instr(0xa1,12);
    {unsigned char carry=cy;
     cpa(load(hl));
+#ifdef USE_REGS
+    hl++, bc--;
+#else
     if(!++l)h++;
     if(!c--)b--;
+#endif
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
    }
 endinstr;
@@ -369,7 +397,11 @@ instr(0xa2,12);
     t=in(b,c);
     store(hl,t);
     INC_TSTATES(t>>8);
+#ifdef USE_REGS
+    hl++;
+#else
     if(!++l)h++;
+#endif
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c)&4);
    }
 endinstr;
@@ -381,7 +413,11 @@ instr(0xa3,12); /* I can't determine the correct flags outcome for the
    {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
     INC_TSTATES(out(b,c,x));
+#ifdef USE_REGS
+    hl++;
+#else
     if(!++l)h++;
+#endif
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
    }
 endinstr;
@@ -389,9 +425,13 @@ endinstr;
 instr(0xa8,12);
    {unsigned char x=load(hl);
     store(de,x);
+#ifdef USE_REGS
+    hl--, de--, bc--;
+#else
     if(!l--)h--;
     if(!e--)d--;
     if(!c--)b--;
+#endif
     f=(f&0xc1)|(x&0x28)|(((b|c)>0)<<2);
    }
 endinstr;
@@ -399,8 +439,12 @@ endinstr;
 instr(0xa9,12);
    {unsigned char carry=cy;
     cpa(load(hl));
+#ifdef USE_REGS
+    hl--, bc--;
+#else
     if(!l--)h--;
     if(!c--)b--;
+#endif
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
    }
 endinstr;
@@ -412,7 +456,11 @@ instr(0xaa,12);
     t=in(b,c);
     store(hl,t);
     INC_TSTATES(t>>8);
+#ifdef USE_REGS
+    hl--;
+#else
     if(!l--)h--;
+#endif
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c^4)&4);
    }
 endinstr;
@@ -421,7 +469,11 @@ instr(0xab,12);
    {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
     INC_TSTATES(out(b,c,x));
+#ifdef USE_REGS
+    hl--;
+#else
     if(!l--)h--;
+#endif
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
    }
 endinstr;
@@ -432,20 +484,31 @@ endinstr;
 instr(0xb0,12);
    {unsigned char x=load(hl);
     store(de,x);
+#ifdef USE_REGS
+    hl++, de++, bc--;
+    f=(f&0xc1)|(x&0x28)|(((bc)>0)<<2);
+    if(bc)pc-=2,INC_TSTATES(5);
+#else
     if(!++l)h++;
     if(!++e)d++;
     if(!c--)b--;
     f=(f&0xc1)|(x&0x28)|(((b|c)>0)<<2);
     if(b|c)pc-=2,INC_TSTATES(5);
+#endif
    }
 endinstr;
 
 instr(0xb1,12);
    {unsigned char carry=cy;
     cpa(load(hl));
+#ifdef USE_REGS
+    hl++, bc--;
+    f=(f&0xfa)|carry|(((bc)>0)<<2);
+#else
     if(!++l)h++;
     if(!c--)b--;
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
+#endif
     if((f&0x44)==4)pc-=2,INC_TSTATES(5);
    }
 endinstr;
@@ -457,7 +520,11 @@ instr(0xb2,12);
      t=in(b,c);
     store(hl,t);
     INC_TSTATES(t>>8);
+#ifdef USE_REGS
+    hl++;
+#else
     if(!++l)h++;
+#endif
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c)&4);
     if(b)pc-=2,INC_TSTATES(5);
    }
@@ -467,7 +534,11 @@ instr(0xb3,12);
    {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
     INC_TSTATES(out(b,c,x));
+#ifdef USE_REGS
+    hl++;
+#else
     if(!++l)h++;
+#endif
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
     if(b)pc-=2,INC_TSTATES(5);
    }
@@ -476,20 +547,31 @@ endinstr;
 instr(0xb8,12);
    {unsigned char x=load(hl);
     store(de,x);
+#ifdef USE_REGS
+    hl--, de--, bc--;
+    f=(f&0xc1)|(x&0x28)|(((bc)>0)<<2);
+    if(bc)pc-=2,INC_TSTATES(5);
+#else
     if(!l--)h--;
     if(!e--)d--;
     if(!c--)b--;
     f=(f&0xc1)|(x&0x28)|(((b|c)>0)<<2);
     if(b|c)pc-=2,INC_TSTATES(5);
+#endif
    }
 endinstr;
 
 instr(0xb9,12);
    {unsigned char carry=cy;
     cpa(load(hl));
+#ifdef USE_REGS
+    hl--, bc--;
+    f=(f&0xfa)|carry|(((bc)>0)<<2);
+#else
     if(!l--)h--;
     if(!c--)b--;
     f=(f&0xfa)|carry|(((b|c)>0)<<2);
+#endif
     if((f&0x44)==4)pc-=2,INC_TSTATES(5);
    }
 endinstr;
@@ -501,7 +583,11 @@ instr(0xba,12);
     t=in(b,c);
     store(hl,t);
     INC_TSTATES(t>>8);
+#ifdef USE_REGS
+    hl--;
+#else
     if(!l--)h--;
+#endif
     f=(b&0xa8)|((b>0)<<6)|2|((parity(b)^c^4)&4);
     if(b)pc-=2,INC_TSTATES(5);
    }
@@ -511,7 +597,11 @@ instr(0xbb,12);
    {unsigned char x=load(hl);
     b--; /* MK: the already decremented b is taken as high port address */ 
     INC_TSTATES(out(b,c,x));
+#ifdef USE_REGS
+    hl--;
+#else
     if(!l--)h--;
+#endif
     f=(f&1)|0x12|(b&0xa8)|((b==0)<<6);
     if(b)pc-=2,INC_TSTATES(5);
    }

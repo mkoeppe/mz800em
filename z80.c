@@ -49,7 +49,12 @@ typedef union {
 } __attribute__ ((aligned (1), packed)) word16;
 
 #ifdef USE_REGS
-register unsigned short pc /* */ asm ("si");
+register unsigned short pc /* */ asm ("bx");
+# if 1
+register unsigned long pc_ /* */ asm ("ebx");
+# else
+#  define pc_ pc
+# endif
 word16 _af;
 word16 _bc, _de;
 # define a _af.__.hi
@@ -66,22 +71,30 @@ word16 _hlixiy[3];
 # define l _hl.__.lo
 # define hl _hl.us
 # define _ix _hlixiy[1]
-# define hx _ix.__.hi
-# define lx _ix.__.lo
 # define ix _ix.us
 # define _iy _hlixiy[2]
-# define hy _iy.__.hi
-# define ly _iy.__.lo
 # define iy _iy.us
 # define _hlxy _hlixiy[ixoriy]
-# define hxy _hlxy.__.hi
-# define lxy _hlxy.__.lo
-# define hlxy _hlxy.us
-# 
+# define xh _hlxy.__.hi
+# define xl _hlxy.__.lo
+# define xhl _hlxy.us
+# define setxh(x) xh=x
+# define setxl(x) xl=x
+# define fetchpc fetch(pc_)
+# define fetch2pc fetch2(pc_)
 #else
-#define bc ((b<<8)|c)
-#define de ((d<<8)|e)
-#define hl ((h<<8)|l)
+# define bc ((b<<8)|c)
+# define de ((d<<8)|e)
+# define hl ((h<<8)|l)
+# define xhl (ixoriy==0 ? hl : (ixoriy==1?ix:iy))
+# define xh (ixoriy==0?h:ixoriy==1?(ix>>8):(iy>>8))
+# define xl (ixoriy==0?l:ixoriy==1?(ix&0xff):(iy&0xff))
+# define setxh(x) (ixoriy==0?(h=(x)):ixoriy==1?(ix=(ix&0xff)|((x)<<8)):\
+                  (iy=(iy&0xff)|((x)<<8)))
+# define setxl(x) (ixoriy==0?(l=(x)):ixoriy==1?(ix=(ix&0xff00)|(x)):\
+                  (iy=(iy&0xff00)|(x)))
+# define fetchpc fetch(pc)
+# define fetch2pc fetch2(pc)
 #endif
 
 mainloop(unsigned short initial_pc, unsigned short initial_sp)
@@ -112,6 +125,9 @@ int count;
 a=f=b=c=d=e=h=l=a1=f1=b1=c1=d1=e1=h1=l1=i=r=iff1=iff2=im=0;
 ixoriy=new_ixoriy=0;
 ix=iy=sp=pc=0;
+#ifdef USE_REGS
+pc_ = 0;
+#endif
 pc = initial_pc;
 sp = initial_sp;
 #ifndef NO_COUNT_TSTATES
@@ -131,7 +147,7 @@ while(1)
   ixoriy=new_ixoriy;
   new_ixoriy=0;
   intsample=1;
-  op=fetch(pc);
+  op=fetchpc;
   pc++;
 #ifndef NO_COUNT_TSTATES
   radjust++;
@@ -178,7 +194,7 @@ while(1)
 #if 1
     if (interrupted >= 4) {
       if(iff1) {
-	if(fetch(pc)==0x76)pc++;
+	if(fetchpc==0x76)pc++;
 	iff1=iff2=0;
 	INC_TSTATES(5); /* accompanied by an input from the data bus */
 	switch(im){

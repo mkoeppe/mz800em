@@ -22,20 +22,12 @@
                                 INC_TSTATES(cycles); \
                                 if(ixoriy==0)addr=hl; \
                                 else INC_TSTATES(morecycles), \
-                                   addr=(ixoriy==1?ix:iy)+ \
-                                        (signed char)fetch(pc),\
+                                   addr=xhl+ \
+                                        (signed char)fetchpc,\
                                    pc++
 #define endinstr             }; break
 
 #define cy (f&1)
-
-#define xh (ixoriy==0?h:ixoriy==1?(ix>>8):(iy>>8))
-#define xl (ixoriy==0?l:ixoriy==1?(ix&0xff):(iy&0xff))
-
-#define setxh(x) (ixoriy==0?(h=(x)):ixoriy==1?(ix=(ix&0xff)|((x)<<8)):\
-                  (iy=(iy&0xff)|((x)<<8)))
-#define setxl(x) (ixoriy==0?(l=(x)):ixoriy==1?(ix=(ix&0xff00)|(x)):\
-                  (iy=(iy&0xff00)|(x)))
 
 #define inc(var) /* 8-bit increment */ ( var++,\
                                          f=(f&1)|(var&0xa8)|\
@@ -48,6 +40,7 @@
                                             ((!var)<<6)\
                                        )
 #define swap(x,y) {unsigned char t=x; x=y; y=t;}
+
 #define addhl(hi,lo) /* 16-bit add */ if(!ixoriy){\
                       unsigned short t;\
                       l=t=l+(lo);\
@@ -94,11 +87,11 @@
                       f=(a&0xa8)|((!a)<<6)|parity(a);\
                    } while(0)
 
-#define jr /* execute relative jump */ do{int j=(signed char)fetch(pc);\
+#define jr /* execute relative jump */ do{int j=(signed char)fetchpc;\
                       pc+=j+1;\
                       INC_TSTATES(5);\
                    } while(0)
-#define jp /* execute jump */ (pc=fetch2(pc))
+#define jp /* execute jump */ (pc=fetch2pc)
 #define call /* execute call */ do{\
                       INC_TSTATES(7);\
                       push2(pc+2);\
@@ -122,8 +115,12 @@ instr(0,4);
 endinstr;
 
 instr(1,10);
-   c=fetch(pc),pc++;
-   b=fetch(pc),pc++;
+#ifdef USE_REGS
+   bc = fetch2pc, pc+=2;
+#else 
+   c=fetchpc,pc++;
+   b=fetchpc,pc++;
+#endif
 endinstr;
 
 instr(2,7);
@@ -131,7 +128,11 @@ instr(2,7);
 endinstr;
 
 instr(3,6);
+#ifdef USE_REGS
+   bc++;
+#else 
    if(!++c)b++;
+#endif
 endinstr;
 
 instr(4,4);
@@ -143,7 +144,7 @@ instr(5,4);
 endinstr;
 
 instr(6,7);
-   b=fetch(pc),pc++;
+   b=fetchpc,pc++;
 endinstr;
 
 instr(7,4);
@@ -165,7 +166,11 @@ instr(10,7);
 endinstr;
 
 instr(11,6);
+#ifdef USE_REGS
+   bc--;
+#else
    if(!c--)b--;
+#endif
 endinstr;
 
 instr(12,4);
@@ -177,7 +182,7 @@ instr(13,4);
 endinstr;
 
 instr(14,4);
-   c=fetch(pc),pc++;
+   c=fetchpc,pc++;
 endinstr;
 
 instr(15,4);
@@ -192,8 +197,12 @@ instr(16,8);
 endinstr;
 
 instr(17,10);
-   e=fetch(pc),pc++;
-   d=fetch(pc),pc++;
+#ifdef USE_REGS
+   de = fetch2pc, pc+=2;
+#else
+   e=fetchpc,pc++;
+   d=fetchpc,pc++;
+#endif
 endinstr;
 
 instr(18,7);
@@ -201,7 +210,11 @@ instr(18,7);
 endinstr;
 
 instr(19,6);
+#ifdef USE_REGS
+   de++;
+#else
    if(!++e)d++;
+#endif
 endinstr;
 
 instr(20,4);
@@ -213,7 +226,7 @@ instr(21,4);
 endinstr;
 
 instr(22,7);
-   d=fetch(pc),pc++;
+   d=fetchpc,pc++;
 endinstr;
 
 instr(23,4);
@@ -236,7 +249,11 @@ instr(26,7);
 endinstr;
 
 instr(27,6);
+#ifdef USE_REGS
+   de--;
+#else
    if(!e--)d--;
+#endif
 endinstr;
 
 instr(28,4);
@@ -248,7 +265,7 @@ instr(29,4);
 endinstr;
 
 instr(30,4);
-   e=fetch(pc),pc++;
+   e=fetchpc,pc++;
 endinstr;
 
 instr(31,4);
@@ -264,33 +281,49 @@ instr(32,7);
 endinstr;
 
 instr(33,10);
+#ifdef USE_REGS
+   xhl = fetch2pc;
+   pc+=2;
+#else
    if(!ixoriy){
-      l=fetch(pc),pc++;
-      h=fetch(pc),pc++;
+      l=fetchpc,pc++;
+      h=fetchpc,pc++;
    }
    else {
-      if(ixoriy==1)ix=fetch2(pc);
-      else iy=fetch2(pc);
+      if(ixoriy==1)ix=fetch2pc;
+      else iy=fetch2pc;
       pc+=2;
    }
+#endif
 endinstr;
 
 instr(34,16);
-   {unsigned short addr=fetch2(pc);
+   {unsigned short addr=fetch2pc;
     pc+=2;
+#ifdef USE_REGS
+    store2(addr, xhl);
+#else
     if(!ixoriy)store2b(addr,h,l);
     else if(ixoriy==1)store2(addr,ix);
     else store2(addr,iy);
+#endif
    }
 endinstr;
 
 instr(35,6);
+#ifdef USE_REGS
+   xhl++;
+#else 
    if(!ixoriy){if(!++l)h++;}
    else if(ixoriy==1)ix++;
    else iy++;
+#endif
 endinstr;
 
 instr(36,4);
+#ifdef USE_REGS
+   inc(xh);
+#else 
    if(ixoriy==0)inc(h);
    else{unsigned char t;
       t=(ixoriy==1?ix:iy)>>8;
@@ -298,9 +331,13 @@ instr(36,4);
       if(ixoriy==1)ix=(ix&0xff)|(t<<8);
       else iy=(iy&0xff)|(t<<8);
    }
+#endif
 endinstr;
 
 instr(37,4);
+#ifdef USE_REGS
+   dec(xh);
+#else 
    if(ixoriy==0)dec(h);
    else{unsigned char t;
       t=(ixoriy==1?ix:iy)>>8;
@@ -308,10 +345,11 @@ instr(37,4);
       if(ixoriy==1)ix=(ix&0xff)|(t<<8);
       else iy=(iy&0xff)|(t<<8);
    }
+#endif
 endinstr;
 
 instr(38,7);
-   setxh(fetch(pc));
+   setxh(fetchpc);
    pc++;
 endinstr;
 
@@ -335,30 +373,45 @@ instr(40,7);
 endinstr;
 
 instr(41,11);
+#ifdef USE_REGS
+   addhl(xh, xl);
+#else 
    if(!ixoriy)addhl(h,l);
    else if(ixoriy==1)addhl((ix>>8),(ix&0xff));
    else addhl((iy>>8),(iy&0xff));
+#endif
 endinstr;
 
 instr(42,16);
-  {unsigned short addr=fetch2(pc);
+  {unsigned short addr=fetch2pc;
    pc+=2;
+#ifdef USE_REGS
+   xhl = load2(addr);
+#else
    if(!ixoriy){
       l=load(addr);
       h=load(addr+1);
    }
    else if(ixoriy==1)ix=load2(addr);
    else iy=load2(addr);
+#endif
   }
 endinstr;
 
 instr(43,6);
+#ifdef USE_REGS
+   xhl--;
+#else 
    if(!ixoriy){if(!l--)h--;}
    else if(ixoriy==1)ix--;
    else iy--;
+#endif
 endinstr;
 
 instr(44,4);
+#ifdef USE_REGS
+   inc(xl);
+#else 
    if(!ixoriy)inc(l);
    else {unsigned char t;
       t=(ixoriy==1?ix:iy);
@@ -366,9 +419,13 @@ instr(44,4);
       if(ixoriy==1)ix=(ix&0xff00)|t;
       else iy=(iy&0xff00)|t;
    }
+#endif
 endinstr;
 
 instr(45,4);
+#ifdef USE_REGS
+   dec(xl);
+#else
    if(!ixoriy)dec(l);
    else {unsigned char t;
       t=(ixoriy==1?ix:iy);
@@ -376,10 +433,11 @@ instr(45,4);
       if(ixoriy==1)ix=(ix&0xff00)|t;
       else iy=(iy&0xff00)|t;
    }
+#endif
 endinstr;
 
 instr(46,4);
-   setxl(fetch(pc));
+   setxl(fetchpc);
    pc++;
 endinstr;
 
@@ -394,12 +452,12 @@ instr(48,7);
 endinstr;
 
 instr(49,10);
-   sp=fetch2(pc);
+   sp=fetch2pc;
    pc+=2;
 endinstr;
 
 instr(50,13);
-  {unsigned short addr=fetch2(pc);
+  {unsigned short addr=fetch2pc;
    pc+=2;
    store(addr,a);
   }
@@ -424,7 +482,7 @@ HLinstr(53,11,8);
 endinstr;
 
 HLinstr(54,10,5);
-   store(addr,fetch(pc));
+   store(addr,fetchpc);
    pc++;
 endinstr;
 
@@ -442,7 +500,7 @@ instr(57,11);
 endinstr;
 
 instr(58,13);
-  {unsigned short addr=fetch2(pc);
+  {unsigned short addr=fetch2pc;
    pc+=2;
    a=load(addr);
   }
@@ -461,7 +519,7 @@ instr(61,4);
 endinstr;
 
 instr(62,4);
-   a=fetch(pc),pc++;
+   a=fetchpc,pc++;
 endinstr;
 
 instr(63,4);
@@ -1018,7 +1076,7 @@ instr(0xc5,11);
 endinstr;
 
 instr(0xc6,7);
-   adda(fetch(pc),0);
+   adda(fetchpc,0);
    pc++;
 endinstr;
 
@@ -1054,7 +1112,7 @@ instr(0xcd,10);
 endinstr;
 
 instr(0xce,7);
-   adda(fetch(pc),cy);
+   adda(fetchpc,cy);
    pc++;
 endinstr;
 
@@ -1077,7 +1135,7 @@ instr(0xd2,10);
 endinstr;
 
 instr(0xd3,11);
-   INC_TSTATES(out(a,fetch(pc),a));
+   INC_TSTATES(out(a,fetchpc,a));
    pc++;
 endinstr;
 
@@ -1091,7 +1149,7 @@ instr(0xd5,11);
 endinstr;
 
 instr(0xd6,7);
-   suba(fetch(pc),0);
+   suba(fetchpc,0);
    pc++;
 endinstr;
 
@@ -1120,7 +1178,7 @@ endinstr;
 
 instr(0xdb,11);
    {unsigned short t;
-      a=t=in(a,fetch(pc));
+      a=t=in(a,fetchpc);
       INC_TSTATES(t>>8);
       pc++;
    }
@@ -1137,7 +1195,7 @@ instr(0xdd,4);
 endinstr;
 
 instr(0xde,7);
-   suba(fetch(pc),cy);
+   suba(fetchpc,cy);
    pc++;
 endinstr;
 
@@ -1151,9 +1209,13 @@ instr(0xe0,5);
 endinstr;
 
 instr(0xe1,10);
+#ifdef USE_REGS
+   pop2(xhl);
+#else
    if(!ixoriy)pop1(h,l);
    else if(ixoriy==1)pop2(ix);
    else pop2(iy);
+#endif
 endinstr;
 
 instr(0xe2,10);
@@ -1162,6 +1224,13 @@ instr(0xe2,10);
 endinstr;
 
 instr(0xe3,19);
+#ifdef USE_REGS
+   {
+     unsigned short t=load2(sp);
+     store2(sp, xhl);
+     xhl=t;
+   }
+#else
    if(!ixoriy){
       unsigned short t=load2(sp);
       store2b(sp,h,l);
@@ -1178,6 +1247,7 @@ instr(0xe3,19);
       store2(sp,iy);
       iy=t;
    }
+#endif
 endinstr;
 
 instr(0xe4,10);
@@ -1186,13 +1256,17 @@ instr(0xe4,10);
 endinstr;
 
 instr(0xe5,11);
+#ifdef USE_REGS
+   push2(xhl);
+#else 
    if(!ixoriy)push1(h,l);
    else if(ixoriy==1)push2(ix);
    else push2(iy);
+#endif
 endinstr;
 
 instr(0xe6,7);
-   anda(fetch(pc));
+   anda(fetchpc);
    pc++;
 endinstr;
 
@@ -1206,7 +1280,11 @@ instr(0xe8,5);
 endinstr;
 
 instr(0xe9,4);
+#ifdef USE_REGS
+   pc = xhl;
+#else
    pc=!ixoriy?hl:ixoriy==1?ix:iy;
+#endif
 endinstr;
 
 instr(0xea,10);
@@ -1229,7 +1307,7 @@ instr(0xed,4);
 endinstr;
 
 instr(0xee,7);
-   xora(fetch(pc));
+   xora(fetchpc);
    pc++;
 endinstr;
 
@@ -1266,7 +1344,7 @@ instr(0xf5,11);
 endinstr;
 
 instr(0xf6,7);
-   ora(fetch(pc));
+   ora(fetchpc);
    pc++;
 endinstr;
 
@@ -1280,7 +1358,11 @@ instr(0xf8,5);
 endinstr;
 
 instr(0xf9,6);
+#ifdef USE_REGS
+   sp=xhl;
+#else
    sp=!ixoriy?hl:ixoriy==1?ix:iy;
+#endif
 endinstr;
 
 instr(0xfa,10);
@@ -1304,7 +1386,7 @@ instr(0xfd,4);
 endinstr;
 
 instr(0xfe,7);
-   cpa(fetch(pc));
+   cpa(fetchpc);
    pc++;
 endinstr;
 

@@ -36,15 +36,15 @@
    unsigned short addr;
    unsigned char op,reg,val;
    if(ixoriy){
-      addr=(ixoriy==1?ix:iy)+(signed char)fetch(pc);
+      addr=(ixoriy==1?ix:iy)+(signed char)fetchpc;
       pc++;
       INC_TSTATES(8);
-      op=fetch(pc);
+      op=fetchpc;
       reg=op&7;
       op=(op&0xf8)|6;
    }
    else{
-      op=fetch(pc);
+      op=fetchpc;
       INC_TSTATES(4);
 #ifndef NO_COUNT_TSTATES
       radjust++;
