@@ -215,6 +215,7 @@ int getmzkey()
     if (ctrl) return 0x16;
     front = (front - 1) % CODERINGSIZE;
     codering[front] = SCANCODE_BACKSPACE;
+    coderingdowncount++;
     return 0x13;
     
   case SCANCODE_CURSORUPLEFT:
