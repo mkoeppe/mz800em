@@ -293,9 +293,13 @@ int keypressed()
 
 extern FILE *printerfile;
 
-#if defined(__CYGWIN__)
+#if !defined(PRINT_INVOKES_ENSCRIPT)
 
-#  define printerfilename "lpt1"
+#  if defined(__CYGWIN__)
+#    define printerfilename "lpt1"
+#  else
+#    define printerfilename "~printer~"
+#  endif
 
 static void openpr()
 {
@@ -310,7 +314,7 @@ void pr(unsigned char c)
   fprintf(printerfile, "%c", c);
 }
 
-#else
+#else /* PRINT_INVOKES_ENSCRIPT */
 
 #  define printcommand "mzprint"
 
@@ -334,16 +338,18 @@ void pr(unsigned char c)
   }
 }
 
-#endif
+#endif /* PRINT_INVOKES_ENSCRIPT */
 
 int print(unsigned char c)
 {
   if (printer_status & 4) {
+    (*mempointer(0x1095))++; /* column counter */
     switch(c) {
     case 0x0D: pr(0x0D);
 #if !defined(MZISHPRINTER)
       pr(0x0A);
 #endif
+      (*mempointer(0x1095))=0;
       return;
     case 0xa1: c='a'; break;  case 0x9a: c='b'; break;  case 0x9f: c='c'; break;
     case 0x9c: c='d'; break;  case 0x92: c='e'; break;  case 0xaa: c='f'; break;
@@ -374,7 +380,7 @@ void send_datetime()
 	  t->tm_year<1900 ? t->tm_year+1900 : t->tm_year);
 }
 
-#if defined(linux)
+#if defined(PRINT_INVOKES_ENSCRIPT)
 
 void hardcopy(int miny, int maxy, int mode)
 {

@@ -137,6 +137,12 @@ Russell writes:
   had anything else to do with it and probably hasn't even heard of
   the MZ700.
 
+Mz800em now optionally works with MZ80, the `Multi-Z80 emulator' by
+Neil Bradley (ftp://ftp.synthcom.com/pub/emulators/cpu/makez80.zip),
+instead of mz800em's traditional Z80 kernel. MZ80 is coded in mixed
+16/32-bit x86 assembler code. On 486's it may lead to a ~30% speedup,
+but on a Pentium both kernels run at about the same speed. Note that I
+didn't try MZ80 too much.
 
 
 Using mz800em
