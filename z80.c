@@ -50,7 +50,7 @@ typedef union {
 
 #ifdef USE_REGS
 register unsigned short pc /* */ asm ("bx");
-# if 1
+# ifdef RISKY_REGS
 register unsigned long pc_ /* */ asm ("ebx");
 # else
 #  define pc_ pc
