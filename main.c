@@ -337,6 +337,12 @@ int main(argc,argv)
   int f;
   unsigned short initial_pc = 0;
   int imagecnt = 0;
+  int mz700ish = 0;
+
+  if(argc>=2 && strcmp(argv[1],"-7")==0) { /* "Start up like a MZ-700" */ 
+    mz700ish = 1;
+    argv+=1, argc-=1;
+  }
 
   if(argc>=3 && strcmp(argv[1],"-t")==0) { /* "timer" */ 
     sscanf(argv[2], "%d", &ints_per_second);
@@ -362,12 +368,14 @@ int main(argc,argv)
 
   loadrom(mem);
   /* adjust ROM entry point */
-#ifdef MZ800IPL
-  mem[ROM_START+1] = 0x00; mem[ROM_START+2] = 0xe8;
-#else
-  mem[ROM_START+1] = 0x4A; mem[ROM_START+2] = 0x00;
-  mem[ROM800_START+0x800] = 0xB7; /* make 800 ROM invisible to the 700 Monitor */
-#endif
+
+  if (!mz700ish) {
+    mem[ROM_START+1] = 0x00; mem[ROM_START+2] = 0xe8;
+  }
+  else {
+    mem[ROM_START+1] = 0x4A; mem[ROM_START+2] = 0x00;
+    mem[ROM800_START+0x800] = 0xB7; /* make 800 ROM invisible to the 700 Monitor */
+  }
 
   /* hack rom load routines to call loader() (see end of edops.c for details) */
   mem[ROM_START+0x0111]=0xed; mem[ROM_START+0x0112]=0xfc;
