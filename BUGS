@@ -22,9 +22,6 @@ From David David:
 > and may be few interrupt control problems..
 > (game Cybernoid)
 > 
-> palette setup
-> (0-7 non bright colors are much lighter on sharp mz-800.)
-> 
 > The .MZF files loading seems to have bugs...
 > and standart .mzf files are impossible to load
 > without adding MZF1 before the file..

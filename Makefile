@@ -11,7 +11,7 @@ INSTALLPREFIX = /usr/local
 
 ## No user-serviceable parts below 
 
-VERSION=0.8.0
+VERSION=0.8.1
 
 ifdef FAST
 
@@ -169,11 +169,11 @@ ROMS = mz700.rom mz800.rom mz700fon.dat
 
 ## Source distribution
 tgz: 
-	$(RM) /scratch/mz800em-$(VERSION)
-	ln -s `pwd` /scratch/mz800em-$(VERSION)
-	tar --directory=/scratch --create --file=/scratch/mz800em-$(VERSION).tar.gz \
+	$(RM) /tmp/mz800em-$(VERSION)
+	ln -s `pwd` /tmp/mz800em-$(VERSION)
+	tar --directory=/tmp --create --file=/tmp/mz800em-$(VERSION).tar.gz \
 		--gzip $(addprefix mz800em-$(VERSION)/, $(FILES))
-	$(RM) /scratch/mz800em-$(VERSION)
+	$(RM) /tmp/mz800em-$(VERSION)
 
 ## Binary distribution
 share.tgz:

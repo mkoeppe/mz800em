@@ -1,7 +1,8 @@
 #! /bin/sh
 # Processing EPSON-style escape codes using `sed'.
+# $Id$
 # We use BEL (\a) as enscript special escape.
-tee t.escaped | sed $'s/\e[0-2].//g;s/\e[-ltxmk].//g;s/\eS.2\eT/\375/g;s/\eS.\([3-9]\)\eT/^\\1/g;s/\eE/\afont{Courier-Bold@10}/g;s/\eF/\afont{Courier@10}/g;s/\017/\afont{Courier@7}/g;s/\022/\afont{Courier@10}/g;' | enscript --no-header --escapes=7 --no-job-header  --encoding=ibmpc --non-printable-format=space --margins=72:72:72:72 --printer=ps
+tee t.escaped | sed $'s/\e[0-2].//g;s/\e[-ltxmk].//g;s/\eS.2\eT/\375/g;s/\eS.\([3-9]\)\eT/^\\1/g;s/\eE/\afont{Courier-Bold@10}/g;s/\eF/\afont{Courier@10}/g;s/\eg/\afont{Courier@7}/g;s/\eh/\afont{Courier@10}/g;' | enscript --no-header --escapes=7 --no-job-header  --encoding=ibmpc --non-printable-format=space --margins=72:72:72:72 --printer=lp
 #--output=
 #cat t.escaped >> xyz.escaped
 #cat t.ps >> xyz.ps 

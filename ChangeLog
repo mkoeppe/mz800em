@@ -1,3 +1,17 @@
+2002-01-27  Matthias Koeppe  <mkoeppe@mail.math.uni-magdeburg.de>
+
+	Version 0.8.1
+	
+	* graphics.c: Made 0-7 non bright colors lighter.  
+	Suggested by David. 
+
+2002-01-26  Matthias Koeppe  <mkoeppe@mail.math.uni-magdeburg.de>
+
+	* mz800gtk.c, mzterm.c: Do GDK colors properly, so colors are
+	right on non-truecolor displays.  Handle border color.  On
+	keyboard read, don't pause() but usleep(), so SEARCH doesn't take
+	so long.
+
 2002-01-22  Matthias Koeppe  <mkoeppe@mail.math.uni-magdeburg.de>
 
 	Version 0.8
