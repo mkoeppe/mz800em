@@ -1,29 +1,55 @@
-# makefile for mz800em
+# Makefile for mz800em
+
+ifdef FAST 
+
+# This will make the Z80 kernel faster, BUT you will lose speed
+# control (which is very important for games), correctness of
+# unaligned memory accesses; compiling z80.c will yield a warning
+# about register use, and the whole thing will hardly compile on
+# low-memory systems.
+
+Z80FLAGS=-DCOPY_BANKSWITCH -DHEAVY_LOAD -DSLOPPY_2 -DUSE_REGS \
+	-DNO_COUNT_TSTATES -DRISKY_REGS
+CFLAGS:=$(CFLAGS) -O9 -m486
+
+else
+
+# This is the normal setting.
+
+Z80FLAGS=-DCOPY_BANKSWITCH -DUSE_REGS
+CFLAGS:=$(CFLAGS) -O -m486
+
+endif
 
 ifdef USE_RAWKEY
+
+# This will make the emulator use Russell's librawkey, as the original
+# mz700em did. I switched over to using the keyboard functions of
+# svgalib instead, since I had several problems with librawkey.
+
 RAWKEYLIB=librawkey.a
 RAWKEYFLAGS=-DUSE_RAWKEY
+
 else
+
+# This is the default setting: Use svgalib keyboard functions.
+
 RAWKEYLIB=
 RAWKEYFLAGS=
+
 endif 
 
-Z80FLAGS=-DCOPY_BANKSWITCH -DHEAVY_LOAD -DSLOPPY_2 -DNO_COUNT_TSTATES -DUSE_REGS
-
-
-### FIXME: options
-
 ifdef DEBUG
-CFLAGS=-I. -O3 -m486 -ggdb3 $(RAWKEYFLAGS) $(Z80FLAGS)
-else
-CFLAGS=-I. -O9 -mpentium $(RAWKEYFLAGS) $(Z80FLAGS) -save-temps -g
+CFLAGS:=$(CFLAGS) -ggdb3 
 endif
 
-ifdef DJ
-CFLAGS=-I. -Ic:/dj/include -O0 -m486 $(RAWKEYFLAGS) $(Z80FLAGS) -Lc:/dj/lib
-endif
+CFLAGS:=$(CFLAGS) -I. $(RAWKEYFLAGS) $(Z80FLAGS)
 
-# this looks wrong, but *ops.c are actually #include'd by z80.c
+
+#### Targets ####
+
+
+# this *looks* wrong, but *ops.c are actually #include'd by z80.c
 MZ800EM_OBJS=main.o z80.o disk.o graphics.o mzterm.o
 
 .PHONY: all install clean tgz
@@ -33,14 +59,8 @@ all: mz800em mzget mzextract
 z80.o: z80.c z80.h cbops.c edops.c z80ops.c
 	$(CC) -c $(CFLAGS) z80.c -o $@
 
-
-ifdef DJ
-mz800em.exe: $(MZ800EM_OBJS)
-	ld $(MZ800EM_OBJS) -o mz800em.exe c:/dj/lib/crt0.o -Lc:/dj/lib -lvga -lc -lgcc
-else
 mz800em: $(MZ800EM_OBJS)
 	$(CC) $(CFLAGS) -o mz800em $(MZ800EM_OBJS) -lvga $(RAWKEYLIB) -lm  
-endif
 
 mzget: mzget.o
 	$(CC) $(CFLAGS) -o mzget mzget.o
@@ -48,21 +68,27 @@ mzget: mzget.o
 mzextract: mzextract.o
 	$(CC) $(CFLAGS) -o mzextract mzextract.o
 
+INSTALLPREFIX = /usr/local
+# You also have to edit `main.c' if you want a different target directory.
 install:
-	install -o root -m 4511 -s mz800em /usr/local/bin
-	install -m 511 -s mzget mzextract /usr/local/bin
-	install -m 511 mzjoinimage /usr/local/bin
-	install -m 444 mz700.rom mz700fon.dat mz800.rom /usr/local/lib
+	install -o root -m 4555 -s mz800em $(INSTALLPREFIX)/bin
+	install -m 555 -s mzget mzextract $(INSTALLPREFIX)/bin
+	install -m 555 mzjoinimage $(INSTALLPREFIX)/bin
+	install -m 444 mz700.rom mz700fon.dat mz800.rom $(INSTALLPREFIX)/lib
 
 clean:
-	$(RM) *.o *~
+	$(RM) -f *.o *~ *.bak *.s *.i mz800em mzextract mzget 
 
 #### Distribution section ####
 
-FILES = COPYING ChangeLog Makefile README README-700 TODO BUGS cbops.c edops.c font.txt \
-	librawkey.a main.c mz700em.h mzextract.c mzget.c mzjoinimage \
-	rawkey.h unpix.c z80.c z80.h z80ops.c disk.c graphics.h graphics.c
+
+FILES = COPYING ChangeLog Makefile README README-700 TODO BUGS		\
+	cbops.c edops.c font.txt					\
+	librawkey.a main.c mz700em.h mzextract.c mzget.c mzjoinimage	\
+	rawkey.h unpix.c z80.c z80.h z80ops.c disk.c graphics.h		\
+	graphics.c mzterm.c						\
+	mz800em.btx
 
 tgz: 
-	tar cfz mz800em-0.4.tar.gz $(FILES)
+	tar cfz mz800em-0.5.tar.gz $(FILES)
 

@@ -95,6 +95,10 @@ On an MZ800, there are three portions of ROM that must be transferred:
    with `font.txt' to generate `mz700fon.dat'. This will create only
    the first 2K of the font data, so the 2nd charset will be missing.)
 
+(If you don't have an MZ800 but an earlier model (MZ700 or MZ80A/B/K),
+just create an empty file `mz800.rom', generate `mz700fon.dat' from
+`font.txt', and invoke the emulator with `mz800em -7'.)
+
 Getting all this code over to your PC is quite a lot of work. So, if
 you have good relations to SHARP Corp., try to convince them that they
 make their SHARP MZ-800 firmware/software free, so that we can include
@@ -116,8 +120,12 @@ are some ideas taken from README-700:
 History etc.
 ------------
 
-Mz800em is based on Mz700em by Russell Marks. See ChangeLog for
-details. 
+Mz800em is based on Mz700em by Russell Marks. Some of the changes at
+the Z80 kernel for version 0.5 (COPY_BANKSWITCH and fetch/read
+distinction), which led to a faster kernel, were inspired by a deep
+view into SHARP.EXE, a very efficient MZ-800 emulator for DOS machines
+by Jaroslav Kysela <kysela@virgo.jcu.cz>, which is unfortunately no
+longer supported by the author. See ChangeLog for details.
 
 Russell writes:
 
@@ -128,6 +136,7 @@ Russell writes:
   any correspondence regarding mz700em should be to me, as Ian hasn't
   had anything else to do with it and probably hasn't even heard of
   the MZ700.
+
 
 
 Using mz800em
@@ -144,7 +153,14 @@ Alt-Fn.
 The emulated MZ800 attempts to run at 3.546MHz; the speed is
 timer-controlled. You can switch the speed control off by typing
 `mz800em -i'; on my P120 (with 48 BogoMips) the emulated MZ800 then
-runs at about 10.8MHz.
+runs at about 14 MHz. If compiled with make option `FAST', mz800em
+will lose all speed control features, but the emulated MZ800 will run
+at about 21 MHz; this will be useful for running proper applications,
+but not for games.
+
+Running it with `mz800em -7' will make the emulator start up like a
+MZ-700, that is, it will enter the monitor 1Z-013A/B. (All MZ-800
+features will be still present.)
 
 The F11 key performs a RESET on the emulated Z80.
 
@@ -196,6 +212,9 @@ operation: read the next section on how to load files.
 
 Loading files
 -------------
+
+To load files, you must first go to the ROM monitor by typing `M' at
+the IPL menu.
 
 * Loading m/c programs at the ROM monitor prompt
 
@@ -256,8 +275,9 @@ Loading files
 
   You might want to apply the BASIC patch to the `s-basic.mzf' file
   instead of typing it in every time. Use your favourite editor to do
-  this (e. g., in `emacs', type `M-x hexl-find-file'). Note that there
-  is a header of 132 bytes in front of the actual code in an MZF file.
+  this (e. g., in `emacs', type `M-x hexl-find-file RET'). Note that
+  there is a header of 132 bytes in front of the actual code in an MZF
+  file.
 
 * Loading an FD-based BASIC interpreter plus BASIC programs
 
@@ -289,8 +309,28 @@ Loading files
 
   You might want to apply the BASIC patch to the `d-basic.mzf' file
   instead of typing it in every time. Use your favourite editor to do
-  this (e. g., in `emacs', type `M-x hexl-find-file'). Note that there
-  is a header of 132 bytes in front of the actual code in an MZF file.
+  this (e. g., in `emacs', type `M-x hexl-find-file RET'). Note that
+  there is a header of 132 bytes in front of the actual code in an MZF
+  file.
+
+
+More patches for the D-BASIC interpreter
+----------------------------------------
+
+In the distribution included is a D-BASIC program `mz800em.btx'. If
+you run it from the D-BASIC interpreter (by typing `RUN"FD:mz800em"'),
+the following features will be enabled:
+
+  - Proper keyboard support.  The MZ-ish way of reading the keyboard
+    is replaced by a new method. This will give you better keyboard
+    response and a normal keyboard layout (assuming German layout I'm
+    afraid, but you can change this with a little work in
+    `mzterm.c'; if you did, please send me a patch). 
+
+  - Printer support.  The printer output is appended to a file
+    `~printer~' in the current working directory. The current LPT mode
+    is respected (conversion takes place or not, according to
+    INIT"LPT:S2" or "S0"). 
 
 
 Transferring data from the MZ to your PC
