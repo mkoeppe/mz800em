@@ -88,6 +88,7 @@ static void MakeDirectory(char *path)
   strcpy(buf, path);
 #if defined(NO_GLOB)
   dir = opendir(buf);
+  if (dir) {
   i = 0;
   while (dirent = readdir(dir)) {
     char pathv[300];
@@ -137,6 +138,7 @@ static void MakeDirectory(char *path)
     }
   }
   closedir(dir);
+  }
 #else /* with glob */
   }
   globfree(&g);
