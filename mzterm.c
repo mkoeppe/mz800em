@@ -89,8 +89,7 @@ void print(unsigned char c)
   if (printer_status & 4) {
     (*mempointer(0x1095))++; /* column counter */
     switch(c) {
-#if defined(__CYGWIN__)
-      /* Cygwin tools seem to have funny problems with NUL chars */
+      /* Recent sed seems to have funny problems with NUL chars */
       case 0x00:
 	pr(' ');
 	return;
@@ -101,7 +100,6 @@ void print(unsigned char c)
       case 0x12:
 	pr(0x1b); pr('h');
 	return;
-#endif
       case 0x0D: pr(0x0D);
 #if !defined(MZISHPRINTER)
       pr(0x0A);
@@ -181,6 +179,7 @@ extern void dontpanic();
 int mztermservice(int channel, int width, int a, int sp)
 {
   static int sleepcounter = 0;
+  static int sleepcounter2 = 0;
   switch (channel) {
   case 0 /* read key */: 
     {
@@ -191,7 +190,11 @@ int mztermservice(int channel, int width, int a, int sp)
       c = getmzkey();
 #if defined(linux)
       if (!c) {
-	pause();
+	/*pause();*/
+	if (++sleepcounter2 == 20) {
+	  usleep(20000);
+	  sleepcounter2 = 0;
+	}
 	c = getmzkey();
       }
 #endif
@@ -202,7 +205,7 @@ int mztermservice(int channel, int width, int a, int sp)
     do_interrupt();
 #endif
 #if defined(linux)
-    pause();
+    /*pause();*/
 #endif
     return keypressed() ? 4 : 0;
   case 2 /* print character */: print(a); return 0;

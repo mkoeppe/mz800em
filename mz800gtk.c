@@ -63,13 +63,16 @@ GtkWidget *drawing_area;
 /* image used for drawing area (faster than a pixmap :-)) */
 GdkImage *image=NULL;
 
+GdkGC *gc;
+
 GtkWidget *window;
 GtkWidget *scrolled_window;
 GtkWidget *sdown_button,*sup_button;
 
-gulong blackpix,whitepix;
-
 int need_keyrep_restore=0;
+
+GdkColor gdkcolors[16];
+GdkColor gdkgrays[16];
 
 static struct update_area
   {
@@ -169,18 +172,16 @@ void maybe_update_graphics()
 
 void update_palette()
 {
-  int *colors = blackwhite ? mzgrays : mzcolors;
+  GdkColor *colors = blackwhite ? gdkgrays : gdkcolors;
   int i;
-  int color;
+  GdkColor *color;
   for (i = 0; i < 16; i++) {
     if (mz800mode) {
-      if ((i >> 2) == palette_block) color = colors[palette[i & 3]];
-      else color = colors[i];
+      if ((i >> 2) == palette_block) color = &colors[palette[i & 3]];
+      else color = &colors[i];
     }
-    else color = colors[i];
-    xcolors[i] = (((((guint32) color) & 0x3f) << 2)
-		  | ((((guint32) color) & 0x3f00) << 10)
-		  | ((((guint32) color) & 0x3f0000) >> 6));
+    else color = &colors[i];
+    xcolors[i] = color->pixel;
   }
   req_screen_update();
   refresh_screen = 1;
@@ -188,7 +189,18 @@ void update_palette()
 
 void do_border(int color)
 {
-  
+  int ox=(drawing_area->allocation.width-(hsize+BORDER_WIDTH*2*xscale))/2;
+  int oy=(drawing_area->allocation.height-(vsize+BORDER_WIDTH*2*yscale))/2;
+
+  gdk_gc_set_foreground(gc,
+			(blackwhite ? gdkgrays : gdkcolors) + (BCOL & 0xf));
+  gdk_draw_rectangle(drawing_area->window, gc, TRUE,
+		     ox, oy, hsize+BORDER_WIDTH*2*xscale, vsize+BORDER_WIDTH*2*yscale);
+  update_rect.left = 0;
+  update_rect.top = 0;
+  update_rect.right = 8*mzbpl*xscale;
+  update_rect.bottom = 200 * yscale;
+  do_update_graphics();
 }
 
 void screen_exit(void)
@@ -274,17 +286,9 @@ if(ry+rh>oy+vsize+ybw*2) rh=oy+vsize+ybw*2-ry;
 /* white out the drawing area first (to draw any borders) */
 if(rw>0 && rh>0)
   {
-    /* FIXME: Alloc Gdk colors and a gc = gdk_gc_new(widget->window)
-       then use this gc to draw the border with BCOL ...
-    GdkColor color;
-    color.red = 65535;
-    color.blue = 0;
-    color.green = 0;
-    color.pixel = 255*65536;
-    gdk_color_alloc(gtk_widget_get_colormap(widget), &color);
-    gdk_gc_set_foreground(drawing_area->style->black_gc, &color);
-    */
-    gdk_draw_rectangle(widget->window,drawing_area->style->black_gc,TRUE,
+    gdk_gc_set_foreground(gc,
+			  (blackwhite ? gdkgrays : gdkcolors) + (BCOL & 0xf));
+    gdk_draw_rectangle(widget->window, gc, TRUE,
 		       rx,ry,rw,rh);
   }
 
@@ -826,10 +830,20 @@ static gint cb_paper(GtkWidget *widget,gpointer junk)
   return(TRUE);
 }
 
-
+void alloc_colors(GdkColor *gdkcolors, int *mzcolors)
+{
+  int i;
+  for (i = 0; i<16; i++) {
+    gdkcolors[i].red = (mzcolors[i] & 0x3f00) << 2;
+    gdkcolors[i].blue = (mzcolors[i] & 0x3f) << 10;
+    gdkcolors[i].green = (mzcolors[i] & 0x3f0000) >> 6;
+    gdk_color_alloc(gtk_widget_get_colormap(drawing_area), &(gdkcolors[i]));
+  }
+}
 
 void screen_init()
 {
+  int i;
 /* basic layout is like this:0x13
  *   (vbox in window contains all this)
  *  ________________________________________  (-/+ control pixel scaling)
@@ -988,14 +1002,18 @@ gdk_window_set_icon(window->window,NULL,icon,mask);
 /* allocate initial backing image for drawing area */
 image=gdk_image_new(GDK_IMAGE_FASTEST,gdk_visual_get_system(),hsize,vsize);
 
-/* get black/white colour values so we can write the image more quickly. */
-gdk_gc_get_values(drawing_area->style->black_gc,&gcval);
-blackpix=gcval.foreground.pixel;
-gdk_gc_get_values(drawing_area->style->white_gc,&gcval);
-whitepix=gcval.foreground.pixel;
+/* Alloc the 16 colors. */
 
+ alloc_colors(gdkgrays, mzgrays);
+ alloc_colors(gdkcolors, mzcolors); 
+ 
  update_palette();
-/* give it a chance to draw it, as it otherwise won't for a while */
+
+ /* Alloc a gc where we can mess with the foreground color */
+
+ gc = gdk_gc_new(drawing_area->window);
+  
+ /* give it a chance to draw it, as it otherwise won't for a while */
  while(gtk_events_pending())
    gtk_main_iteration();
 /* that's all folks */
