@@ -59,7 +59,7 @@ static void needconsole()
 /* Proper keyboard interface; German keyboard layout. */
 int getmzkey()
 {
-  int c;
+  int c, ext;
   
   needconsole();
 
@@ -87,7 +87,8 @@ int getmzkey()
   
   c = codering[front];
   front = (front+1) % CODERINGSIZE;
-
+  ext = c & 0x100, c &= ~0x100;
+  
   if (!(c&0x8000)) coderingdowncount--;
 
 #if defined(__CYGWIN__)
@@ -104,6 +105,7 @@ int getmzkey()
   alt = GetAsyncKeyState(SCANCODE_RIGHTALT) 
     || GetAsyncKeyState(SCANCODE_LEFTALT) 
     || GetAsyncKeyState(VK_MENU);
+  numlock = GetKeyState(SCANCODE_NUMLOCK) & 1;
   /* NOTE: This is not just a hack but a really disgusting one */
 #  include "scancode.h"
 #else
@@ -129,7 +131,7 @@ int getmzkey()
 
   if (coderingdowncount) return 0;
 
-  if (numlock) {
+  if (numlock && !ext) {
     switch (c) {
     case SCANCODE_KEYPAD7: return '7';
     case SCANCODE_KEYPAD8: return '8';
@@ -144,7 +146,6 @@ int getmzkey()
     case SCANCODE_KEYPADPERIOD: return '.';
     }
   }
-
    
   switch (c) {
   case SCANCODE_ESCAPE:	return 0x1b;
@@ -223,9 +224,11 @@ int getmzkey()
   case SCANCODE_F11: return 0;
   case SCANCODE_F12: return 0;
 
+#if !defined(__CYGWIN__)
   case SCANCODE_NUMLOCK: 
     numlock = !numlock;
     return 0;
+#endif
   case SCANCODE_SCROLLLOCK:
     scrolllock = !scrolllock;
     return 0;
@@ -297,7 +300,7 @@ extern FILE *printerfile;
 static void openpr()
 {
   if (!printerfile) {
-    printerfile = fopen(printerfilename, "a");
+    printerfile = fopen(printerfilename, "ab");
   }
 }
 
@@ -337,7 +340,11 @@ int print(unsigned char c)
 {
   if (printer_status & 4) {
     switch(c) {
-    case 0x0D: pr(0x0D); pr(0x0A); return;
+    case 0x0D: pr(0x0D);
+#if !defined(MZISHPRINTER)
+      pr(0x0A);
+#endif
+      return;
     case 0xa1: c='a'; break;  case 0x9a: c='b'; break;  case 0x9f: c='c'; break;
     case 0x9c: c='d'; break;  case 0x92: c='e'; break;  case 0xaa: c='f'; break;
     case 0x97: c='g'; break;  case 0x98: c='h'; break;  case 0xa6: c='i'; break;
@@ -436,7 +443,8 @@ int mztermservice(int channel, int width, int a, int sp)
     /* following are new */
   case 16 /* set capital mode */: scrolllock = a; return 0;
   case 17 /* sleep for 1 ms (average) */: 
-    if (++sleepcounter == 20) {
+    if (++sleepcounter == 20) { /* FIXME: Should probably increase
+				   granularity */
       usleep(20000);
       sleepcounter = 0;
     }
