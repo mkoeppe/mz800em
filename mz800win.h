@@ -1,0 +1,158 @@
+#include <windows.h>
+
+extern HWND window_handle;
+
+void setup_windows(void);
+void close_windows(void);
+void handle_messages(void);
+void win_update_graphics(void);
+
+/* Constants compatible with vgakeyboard.h */
+
+#define SCANCODE_ESCAPE			VK_ESCAPE
+
+#define SCANCODE_1			VK_1
+#define SCANCODE_2			VK_2
+#define SCANCODE_3			VK_3
+#define SCANCODE_4			VK_4
+#define SCANCODE_5			VK_5
+#define SCANCODE_6			VK_6
+#define SCANCODE_7			VK_7
+#define SCANCODE_8			VK_8
+#define SCANCODE_9			VK_9
+#define SCANCODE_0			VK_0
+
+#define SCANCODE_BACKSPACE		VK_BACK
+#define SCANCODE_TAB			VK_TAB
+
+#define SCANCODE_Q			VK_Q
+#define SCANCODE_W			VK_W
+#define SCANCODE_E			VK_E
+#define SCANCODE_R			VK_R
+#define SCANCODE_T			VK_T
+#define SCANCODE_Y			VK_Y
+#define SCANCODE_U			VK_U
+#define SCANCODE_I			VK_I
+#define SCANCODE_O			VK_O
+#define SCANCODE_P			VK_P
+
+#define SCANCODE_ENTER			VK_RETURN
+
+#define SCANCODE_LEFTCONTROL		VK_LCONTROL
+
+#define SCANCODE_A			VK_A
+#define SCANCODE_S			VK_S
+#define SCANCODE_D			VK_D
+#define SCANCODE_F			VK_F
+#define SCANCODE_G			VK_G
+#define SCANCODE_H			VK_H
+#define SCANCODE_J			VK_J
+#define SCANCODE_K			VK_K
+#define SCANCODE_L			VK_L
+
+#define SCANCODE_LEFTSHIFT		VK_LSHIFT
+
+#define SCANCODE_Z			VK_Z
+#define SCANCODE_X			VK_X
+#define SCANCODE_C			VK_C
+#define SCANCODE_V			VK_V
+#define SCANCODE_B			VK_B
+#define SCANCODE_N			VK_N
+#define SCANCODE_M			VK_M
+
+#define SCANCODE_RIGHTSHIFT		VK_RSHIFT
+#define SCANCODE_KEYPADMULTIPLY		VK_MULTIPLY
+
+#define SCANCODE_LEFTALT		VK_LMENU
+#define SCANCODE_SPACE			VK_SPACE
+#define SCANCODE_CAPSLOCK		VK_CAPITAL
+
+#define SCANCODE_F1			VK_F1
+#define SCANCODE_F2			VK_F2
+#define SCANCODE_F3			VK_F3
+#define SCANCODE_F4			VK_F4
+#define SCANCODE_F5			VK_F5
+#define SCANCODE_F6			VK_F6
+#define SCANCODE_F7			VK_F7
+#define SCANCODE_F8			VK_F8
+#define SCANCODE_F9			VK_F9
+#define SCANCODE_F10			VK_F10
+
+#define SCANCODE_NUMLOCK			VK_NUMLOCK
+#define SCANCODE_SCROLLLOCK			VK_SCROLL
+
+#define SCANCODE_KEYPAD7			VK_NUMPAD7
+#define SCANCODE_CURSORUPLEFT			VK_NUMPAD7
+#define SCANCODE_KEYPAD8			VK_NUMPAD8
+#define SCANCODE_CURSORUP			VK_NUMPAD8
+#define SCANCODE_KEYPAD9			VK_NUMPAD9
+#define SCANCODE_CURSORUPRIGHT			VK_NUMPAD9
+#define SCANCODE_KEYPADMINUS			VK_SUBTRACT
+#define SCANCODE_KEYPAD4			VK_NUMPAD4
+#define SCANCODE_CURSORLEFT			VK_NUMPAD4
+#define SCANCODE_KEYPAD5			VK_NUMPAD5
+#define SCANCODE_KEYPAD6			VK_NUMPAD6
+#define SCANCODE_CURSORRIGHT			VK_NUMPAD6
+#define SCANCODE_KEYPADPLUS			VK_ADD
+#define SCANCODE_KEYPAD1			VK_NUMPAD1
+#define SCANCODE_CURSORDOWNLEFT			VK_NUMPAD1
+#define SCANCODE_KEYPAD2			VK_NUMPAD2
+#define SCANCODE_CURSORDOWN			VK_NUMPAD2
+#define SCANCODE_KEYPAD3			VK_NUMPAD3
+#define SCANCODE_CURSORDOWNRIGHT		VK_NUMPAD3
+#define SCANCODE_KEYPAD0			VK_NUMPAD0
+#define SCANCODE_KEYPADPERIOD			VK_DECIMAL
+
+#define SCANCODE_F11			VK_F11
+#define SCANCODE_F12			VK_F12
+
+#define SCANCODE_KEYPADENTER			VK_RETURN
+#define SCANCODE_RIGHTCONTROL			VK_RCONTROL
+#define SCANCODE_CONTROL			VK_CONTROL
+#define SCANCODE_KEYPADDIVIDE			VK_DIVIDE
+#define SCANCODE_PRINTSCREEN			VK_PRINT
+#define SCANCODE_RIGHTALT			VK_RMENU
+#define SCANCODE_BREAK			        VK_PAUSE
+#define SCANCODE_BREAK_ALTERNATIVE		VK_PAUSE
+
+#define SCANCODE_HOME			VK_HOME
+#define SCANCODE_CURSORBLOCKUP			VK_UP	/* Cursor key block */
+#define SCANCODE_PAGEUP			VK_PRIOR
+#define SCANCODE_CURSORBLOCKLEFT			VK_LEFT	/* Cursor key block */
+#define SCANCODE_CURSORBLOCKRIGHT			VK_RIGHT	/* Cursor key block */
+#define SCANCODE_END			VK_END
+#define SCANCODE_CURSORBLOCKDOWN			VK_DOWN	/* Cursor key block */
+#define SCANCODE_PAGEDOWN			VK_NEXT
+#define SCANCODE_INSERT			VK_INSERT
+#define SCANCODE_REMOVE			VK_DELETE
+
+#if 1
+/* this assumes US layout */
+#define SCANCODE_LESS			(0x180+(int)'<')
+#define SCANCODE_COMMA			0xbc
+#define SCANCODE_PERIOD			0xbe
+#define SCANCODE_SLASH			0xbf
+#define SCANCODE_SEMICOLON		0xba
+#define SCANCODE_APOSTROPHE		0xde
+#define SCANCODE_GRAVE			0xc0
+#define SCANCODE_MINUS			0xbd
+#define SCANCODE_EQUAL			0xbb
+#define SCANCODE_BRACKET_LEFT		0xdb
+#define SCANCODE_BRACKET_RIGHT		0xdd
+#define SCANCODE_BACKSLASH		0xdc
+#else
+/* this assumes German layout */
+#define SCANCODE_LESS			0x1bc
+#define SCANCODE_COMMA			0xbc
+#define SCANCODE_PERIOD			0xbe
+#define SCANCODE_SLASH			0xbd
+#define SCANCODE_SEMICOLON		0xba
+#define SCANCODE_APOSTROPHE		0xde
+#define SCANCODE_GRAVE			0xc0
+#define SCANCODE_MINUS			0xbd
+#define SCANCODE_EQUAL			0xbb
+#define SCANCODE_BRACKET_LEFT		0xdb
+#define SCANCODE_BRACKET_RIGHT		0xdd
+#define SCANCODE_BACKSLASH		0xdc
+#endif
+
