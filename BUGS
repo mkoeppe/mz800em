@@ -6,3 +6,41 @@ cleaned up. There are too many hacks at the moment.
 
 When using `mz80' instead of the native Z80 kernel, a lot of things
 fail. 
+
+From David David: 
+
+> also here are some emulator bug I noticed:
+> 
+> (waiting for retrace )
+> @in a,(0ceh)
+> and 40h
+> jr z,@
+> @in a,(0ceh)
+> and 40h
+> jrnz,@
+> 
+> making some programs hang with your emulator that work on real mz800
+> (that occurs in Solomons Key and Dizzy 3,4 )
+> also there is hardware scrolling bug
+> and may be few interrupt control problems..
+> (game Cybernoid)
+> 
+> palette setup
+> (0-7 non bright colors are much lighter on sharp mz-800.)
+> 
+> The .MZF files loading seems to have bugs...
+> and standart .mzf files are impossible to load
+> without adding MZF1 before the file..
+> 
+> I think that IPL routine also loads tape files not only boot disk images
+> what about catching 'C' menu option routine in rom
+> and both header and dat loading subroutines?
+> 
+> so file selector could appear after pressing 'C' and put
+> header+dat into memory the exact way - with system settings like mz800
+> does..
+> - that would remove some hangs when exec loading files
+> 
+> I think files with exec 1000h cannot be executed on mz800 IPL.
+> the exec must 1200h or higher
+

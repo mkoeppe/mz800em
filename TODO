@@ -48,3 +48,30 @@ into one `mzf' file.
 
 Support file formats of other mz700 emulators.  Or write a script for
 converting these file formats.
+
+From David David:
+
+> there is .tzx file format, that is used for ZX-Spectrum tapes.
+> the data are stored the way like on tape - each block has its
+> own description of pulses, wave lenghts etc. and then data appear.
+> 
+> by this way, it is possible to store the correct timing and all.
+> even protected tape loaders, tricky routines and so on...
+> also you can emulate SAVE/LOAD routines (in outs) exactly so the software
+> is 100% working like on real computer.
+> 
+> later it was also applied amstrad cpc tapes and commodore C64 tapes.
+> It can be also used to store sharp mz-800 tapes...
+> 
+> these are ZX-Spectrum emulators that works with that format.. the
+> best one is ZX-32 for Windows9x
+> ftp://ftp.demon.co.uk/pub/emulators/spectrum/emulators/zx32*.zip
+> 
+> take a look in it so you can see how nice it emulates all hardware:)
+> 
+> that emulator also have pretty TV like fullscreen mode -
+> for 320x200 it set ups 640x400 and outs screen on every 2nd line.
+> - that makes the 'feeling' of a TV.
+> if would be nice to have such one in mz800em.
+> 
+> you could make the .tzx format support in your emulator toooo.
